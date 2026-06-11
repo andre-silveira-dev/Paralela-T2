@@ -1,4 +1,4 @@
-Ci1316 1sem2026  - trabalho 2 - versao INICIAL - v1.0  
+Ci1316 1sem2026  - trabalho 2 - versao INICIAL - v1.1
 ---------------
 
 Postado em 8/jun/2026
@@ -10,6 +10,7 @@ Equipe de alunos:
 ----------------------    
 Historico:
 versao v1.0 versao INICIAL 8/jun/2026
+       v1.1 corrigido a descricao de processos e threads nas experiencias
     
 OBS: essa especificacao pode receber melhorias 
      para melhor clareza das atividades a serem desenvovidas
@@ -271,8 +272,9 @@ Para as experiências:
 
 A quantidade de elementos para as experiencias:
   Tipicamente teremos:
-  - Vetor Input de 8Milhoes de elementos long long
-    (OBS: 8 Milhoes significa: 8000000)
+  - Vetor Input de alguns Milhoes de elementos long long
+    (OBS: Milhoes significa: 10^6, i.e. potencia de 10)
+    ver total correto de elementos na descriçao das experiencias.    (v1.1)
     o numero de elementos total deve ser obtido da linha de comando
     e ser colocado na variavel global nTotalElements
     
@@ -321,33 +323,37 @@ USAREMOS NR (numero de repeticoes internas) do programa com valor 10  (mesma coi
 •
 • Experiencia 1: 
     32000 pivôs, 512 bins, total de elementos 32000000, nr 10
-  Rodar o programa com slurm e MPI (seu script rodar-exp1-1n-8ppn.sh)
-  para APENAS 1 nodo do cluster e 8 processos MPI nesse nodo (total de 8 processo MPI, e 8 particoes)
+  Rodar o programa com slurm e MPI (seu script rodar-exp1-1n-8ppn-1thpp.sh)
+  para APENAS 1 nodo do cluster e 8 processos MPI nesse nodo,
+  1 thread por processo (total de 8 processos MPI)    (v1.1)
   colocar os resultados dessa experiencia no arquivo:
-      saida-slurm-exp1-1n-8ppn.txt
+      saida-slurm-exp1-1n-8ppn-1thpp.txt
   importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
-      resultados-exp1-1n-8ppn   
+      resultados-exp1-1n-8ppn-1thpp  
   (importe com os separadores ADEQUADOS)     
   
 • Experiencia 2:  
     32000 pivôs, 512 bins, total de elementos 32000000, nr 10
-  Rodar o programa com slurm e MPI (seu script rodar-exp2-2n-8ppn.sh)
-  para 2 nodos do cluster e 8 processos MPI em cada nodo (total de 16 processo MPI, e 16 particoes)
+  Rodar o programa com slurm e MPI (seu script rodar-exp2-2n-4ppn-2thpp.sh)
+  para 2 nodos do cluster e 4 processos MPI em cada nodo,
+  2 threads por processo (total de 8 processo MPI)        (v1.1)
   colocar os resultados dessa experiencia no arquivo:
-      saida-slurm-exp2-2n-8ppn.txt
+      saida-slurm-exp2-2n-4ppn-2thpp.txt
   importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
-      resultados-exp2-2n-8ppn   
+      resultados-exp2-2n-4ppn-2thpp   
   (importe com os separadores ADEQUADOS)     
   
 • Experiencia 3: 
     32000 pivôs, 512 bins, total de elementos 32000000, nr 10
-  ou seja, o nome resultados-4n-8ppn significa 4 nodos, 8 processos por nodo
-  Rodar o programa com slurm e MPI (seu script rodar-exp3-4n-8ppn.sh)
-  para 4 nodos do cluster e 8 processos MPI em cada nodo (total de 32 processos MPI, e 32 particoes)
+  ou seja, o nome resultados-4n-2ppn-4thpp significa 4 nodos, 2 processos por nodo,
+  4 threads por processo 
+  Rodar o programa com slurm e MPI (seu script rodar-exp3-4n-2ppn-4thpp.sh)
+  para 4 nodos do cluster e 2 processos MPI em cada nodo, 
+  4 threads por processo (total de 8 processos MPI)        (v1.1)
   colocar os resultados dessa experiencia no arquivo:
-      saida-slurm-exp3-4n-8ppn.txt
+      saida-slurm-4n-2ppn-4thpp.txt
   importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
-      resultados-exp3-4n-8ppn   
+      resultados-exp3-4n-2ppn-4thpp
   (importe com os separadores ADEQUADOS)     
 
 O que entregar?
