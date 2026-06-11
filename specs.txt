@@ -1,0 +1,485 @@
+Ci1316 1sem2026  - trabalho 2 - versao INICIAL - v1.0  
+---------------
+
+Postado em 8/jun/2026
+DATA da Entrega: 24/jun/2026 (17 dias)
+Local de entrega: UFPR Virtual
+Equipe de alunos:
+   Esse trabalho pode ser feito em grupo de NO MAXIMO dois alunos(as)
+
+----------------------    
+Historico:
+versao v1.0 versao INICIAL 8/jun/2026
+    
+OBS: essa especificacao pode receber melhorias 
+     para melhor clareza das atividades a serem desenvovidas
+--------------------------
+
+Nesse trabalho 2 vamos paralelizar o problemas de 
+multiparticionamento de dados usando MPI + pthreads.
+
+Na UFPR virtual existe um PDF com figuras ilustrativas
+sobre as ideias desse trabalho.
+
+O trabalho foi pensado de maneira a que você possa reutilizar
+muitas das partes do trabalho 1 (Histograma com pthreads, bem como
+suas funcoes auxiliares e conceitos).
+Assim, ao reaproveitar ao máximo o trabalho anterior, voce ganhou
+tempo, tornando mais facil e menos trabalhosa a tarefa deste trabalho 2.
+
+- As as funções devem ENCAPSULAR tudo
+  para a paralelização com threads, ou seja, nada pode ser deixado 
+  para o chamador fazer. O programador apenas aloca espaco 
+  e preenche os dados de entrada, aloca espaco para receber os dados de
+  saida e chama as funcoes que fazem uso de paralelismo com threads.
+  
+- As suas novas solucoes de funcoes que usam threads 
+  devem ser feitas TAMBEM com pool de threads.
+
+VARIACAO com MPI:  
+  No caso de tarefas ou chamadas de funcoes que devam ser feitas com MPI,
+  *não* vamos exigir encapsulamento dessas, para facilitar o trabalho.
+  Então voce pode fazer tudo que precisar de MPI no programa main,
+  ou encapsular caso você ache mais apropriado.
+  
+A FUNÇÃO a ser paralelizada com pthreads
+----------------------------------------
+
+// ............................. prototipo da funcao:     
+int parallel_multiPartition(
+    const long long  *Input,       /* input array                          */
+    long long        *Output,      /* Output array (partitioned per bin)   */
+    long long         nElements,   /* number of elements                   */
+    const long long  *Limits,      /* bin boundaries, size nbins+1         */
+    int               nbins,       /* number of bins                       */
+    long long        *Pos,         /* output histogram, size nbins         */
+    int               nthreads     /* number of threads (1 = serial path)  */
+);
+
+  A função parallel_multiPartition( ... ) 
+  - é uma versão de particionamento para multiplas faixas com pthreads.
+  - essa funcao vai rodar dentro dos processos MPI 
+    rodando nthreads dentro de cada processo MPI.
+  - note que essa funcao pode chamar sua funcao de histograma feita
+    para o trab. 1   
+    
+  O que faz a funcao parallel_multiPartition ?
+  - Particiona o numeros do vetor Input de tamanho nElements 
+      em faixas determinadas por, lendo elementos de Input e
+      posicionando os elementos por faixa no vetor Output.
+  - O vetor de entrada Limits tem os limites de cada faixa
+    (eh o mesmo conceito do Histograma do trab. 1)
+
+A saida da funcao parallel_multiPartition:
+   - Retorna DOIS vetores de saida:
+     - o vetor Output, "particionado" em np faixas
+     - o vetor Pos, indicando a posiçao do inicio de cada faixa do vetor Output
+     
+  Exemplo:      .  .      .  .            .  .  .            
+  Input[] = {8, 4, 13, 7, 11, 100, 44, 3, 7, 7, 100, 110, 46, 44};
+  nElements = 14;   // n == numero de elementos em Input e em Output
+  
+  Suponha que os limites escolhidos foram:
+  Limits[5] = {LLONG_MIN, 12, 70, 90, LLONG_MAX};   // OBS: incluir <limits.h> que tem LLONG_MAX
+  nbins = 4;    // nbins == numero de faixas no vetor de Limits
+                // nesse caso sao 4 faixas
+                // faixa 0: numeros no intervalo [LLONG_MIN, 12)
+                // faixa 1: numeros no intervalo [12,70)
+                // faixa 2: numeros no intervalo [70,90)
+                // faixa 3: numeros no intervalo [90,LLONG_MAX] 
+  ao chamar 
+     multi_partition( ... ); 
+  
+  retorna os vetores de Saida:                                  
+    
+               Output[] = {8, 4, 7, 11, 3, 7, 7, 13, 44, 46, 44, 100, 100, 110 }; 
+  // posicoes de Output:   0  1  2  3   4  5  6  7   8   9   10  11   12   13    
+  //  indiquei acima       |                     |               |                 
+  //  as posicoes do       | +-------------------+               |                  
+  //  vetor para          ++ |                                   |              
+  //  entendimento        |  |  +---+----------------------------+            
+                          |  |  |   |  
+  unsigned int Pos[20] = {0, 7, 11, 11 };   // indica o inicio de cada faixa de saida           
+                
+OBS: note que implicitamente temos o tamanho de cada faixa
+     // faixa 0: tem tamanho 7-0   (7 numeros)  ou seja Pos[1] - Pos[0]
+     // faixa 1: tem tamanho 11-7  (4 numeros)  ou seja Pos[2] - Pos[1]
+     // faixa 2: tem tamanho 11-11 (0 numeros)  ou seja Pos[3] - Pos[2]
+     // faixa 3: tem tamanho 14-11 (3 numeros)  ou seja nElements - Pos[3]
+     
+OBS: o vetor de saida sempre terá o mesmo tamanho do vetor de entrada,
+     ou seja nElements  
+     
+SOBRE A funçao de verificaçao a ser chamada
+-------------------------------------------
+
+Caso o parametro -Verify seja especificado na linha de comando
+o seu programa deve chamar a funcao de verificacao de particionamento
+(Verificacao do particionamento local) em cada processo MPI,
+essa funcao deve rodar APENAS na thread 0 de cada processo MPI.
+A funcao verifica_particoesLocais(…) que DEVE ter o
+mesmo prototipo abaixo. 
+Esta funcao de verificacao a ser chamada dentro de cada processo MPI
+deve verificar as faixas dos elementos locais e imprimir 
+se o particionamento feito por sua funcao paralela parallel_multiPartition
+está correto ou nao naquele processo MPI.
+
+prototipo da funcao de verificacao local:     
+    void verifica_particoesLocais(
+    const long long  *Input,       /* input array                          */
+    long long        *Output,      /* Output array (partitioned per bin)   */
+    long long         nElements,   /* number of elements                   */
+    const long long  *Limits,      /* bin boundaries, size nbins+1         */
+    int               nbins,       /* number of bins                       */
+    long long        *Pos,         /* output histogram, size nbins         */
+    int               nthreads     /* number of threads (1 = serial path)  */
+);
+                             
+// a funcao deve verificar e imprimir uma dessas mensagens:
+      ===> particionamento local COM ERROS no rank nn   
+ou
+      ===> particionamento local CORRETO no rank nn
+
+(OBS: acima, nn eh o numero do processo MPI)      
+      
+// Caso queira imprimir mais alguma coisa em caso de erro
+//  esteja a vontade     
+
+Uso de primitivas MPI
+---------------------
+Para fazer a distribuição dos dados          
+voce deve usar as “melhores” funções de MPI,
+ou seja, DEVE usar as melhores funcoes COLETIVAS de MPI quando for possível
+(evitar enviar/receber dados com funcoes ponto-a-ponto tipo send/receive
+ a nao ser quando NAO existir uma funcao coletiva mais adequada)
+ 
+i..e, tentar usar as operacoes mais adequadas para fazer essa distibuição das faixas de dados
+IMPORTANTE:
+Note que CADA FAIXA PODE TER QUANTIDADE DIFERENTE de dados
+
+
+O programa MPI:
+--------------
+
+SINOPSE
+-------
+  mpirun -np n MPI+Pthreads-Multipartition <nelements> <npivots> <nbins> <nthreads> <nr>
+  
+  -np indica o numero de processos MPI
+  OBS:
+      note que no caso de usar o SLURM (serah o nosso caso)
+      a maneira de especificar o numero de processos NAO eh com -np
+      POIS o SLURM é que passa o numero de processos para o MPI
+      entao o SCRIPT slurm que voce usar para rodar suas experiencias
+      eh que DEVE especificar o numero de processos
+
+
+PARÂMETROS DE ENTRADA
+---------------------
+
+  nelements
+      Tipo    : inteiro longo (long long)
+      Restrição: > 0
+      Descrição: Número de elementos long long no array de entrada.
+                 O array é gerado aleatoriamente a cada round, cobrindo
+                 todo o intervalo de long long (incluindo negativos).
+                 
+                 OBS: voce vai gerar o vetor de entrada da mesma forma que foi feita
+                      no trab 1 (Histograma com pthreads)
+                 POREM: nelements eh o numero total de elementos.
+                        SE temos np processos MPI 
+                        ENTAO cada processo deve gerar nelements/np elementos
+                              localmente em seu vetor Input,
+                 OU SEJA:
+                        O vetor Input tem um pedaco em cada processo
+                        (está distribuido entre os processos)
+                 PORQUE:
+                        O prof. adotou esse metodo, de modo que voce tenha
+                        menos trabalho! Porque assim voce nao precisa
+                        gerar tudo no rank 0 e enviar os pedaços para os outros ranks
+                        ou seja, o vetor ja fica gerado em pedacos,
+                        cada pedaco em um processo MPI.                         
+
+  npivots
+      Tipo    : inteiro
+      Restrição: >= 2, >= nbins, <= nelements
+      Descrição: Número de pivôs amostrados para construir os limites
+                 dos bins. Mais pivôs produzem bins mais equilibrados,
+                 ao custo de maior tempo de construção.
+
+                 OBS: voce vai amostrar pivôs da mesma forma que foi feita
+                      no trab 1 (Histograma com pthreads)
+                 POREM:
+                      como cada processo MPI tem um pedaço da entrada
+                      e precisamos obter npivots,
+                 ENTAO: cada processo deve:
+                          *  gerar npivots/np pivôs localmente,
+                             e ENVIAR para o processo 0.
+                          *  o processo 0 gera os valores do Limits e envia
+                             a todos os outros processos MPI
+                 ASSIM: após essa comunicacao dos Limits:
+                        cada processo MPI terá o MESMO vetor de Limits
+                        de todos os outros.
+                        
+  nbins
+      Tipo    : inteiro
+      Restrição: >= 1
+      Descrição: Número de bins do particionamento. Cada bin representa um
+                 intervalo [Limits[i], Limits[i+1]). 
+                 O *último* bin é fechado à direita: 
+                                          [Limits[nbins-1], Limits[nbins]].
+                                    ou seja
+                                          [Limits[nbins-1], LLONG_MAX]
+
+  nthreads
+      Tipo    : inteiro
+      Restrição: >= 1
+      Descrição: Número de threads de trabalho para a versão paralela
+                 DENTRO de cada processo MPI.
+                 Veja, eh o numero de threads em CADA processo MPI.
+                 O valor 1 executa sem criar threads extras (caminho
+                 serial puro, sem barreiras).
+                 Nesse caso: 
+                 
+                 exemplo1:   se nthreads = 2, e temos 4 processos MPI
+                             teremos um total de 2*4 = 8 threads no
+                             sistema de processos MPI,
+                             porém cada 2 threads irmãs 
+                             estarao em um mesmo processo MPI
+                                                          
+                 exemplo2:   se nthreads = 1, e temos 4 processos MPI
+                             teremos um total de 1*4 = 4 threads no
+                             sistema de processos MPI, porém cada
+                             thread está em um processo MPI diferente
+
+  nr
+      Tipo    : inteiro
+      Restrição: >= 1
+      Descrição: Número de repetições. Cada round gera um novo array
+                 aleatório independente, recalcula os limites e executa
+                 o particionamento. Usado para obter médias estáveis de tempo.
+                 
+Experiencias e resultados:
+
+Para as experiências:
+---------------------
+
+  Somente serao aceitos resultados obtidos 
+  na maquinas do cluster w (xeon), da disciplina, 
+  executados com slurm (sbatch) em modo --exclusive
+  o script para rodar seu trabalho em slurm DEVE ser entregue
+
+A quantidade de elementos para as experiencias:
+  Tipicamente teremos:
+  - Vetor Input de 8Milhoes de elementos long long
+    (OBS: 8 Milhoes significa: 8000000)
+    o numero de elementos total deve ser obtido da linha de comando
+    e ser colocado na variavel global nTotalElements
+    
+  - Como vamos gerar os vetores ?
+    já descrito
+    Vamos gerar numeros aleatorios da mesma forma que foi feito
+    no trabalho 1
+    
+    MAIS UM DETALHE: INICIALIZACAO dos números ALEATORIOS
+                      ====================================
+    Para que todos os alunos gerem os mesmos numeros aleatorios
+    é necessario chamar, no inicio do programa main()
+    a funcao de inicializacao de semente dos numeros aleatorios
+    Cada processo MPI deve inicializar a semente (seed) assim:
+    - o processo i deve inicializar com a semente 
+      s = 2025 * 100 + i
+             
+   * Sobre as MEDICOES:
+     voce DEVE usar as funcoes de medicao de tempo do prof. (chronos)               
+
+- Voce pode fazer as experiencias se baseando nas planilhas feitas pelo prof.
+  (experiencias baseadas na planilha de reducao paralela com pool de threads)
+  adaptando suas experiencias para os casos, como foi feito para o trabalho 1.
+  
+  IMPORTANTE: 
+    ao colocar os resultados nas folhas de resultados da planilha
+    voce DEVE deixar as informacoes geradas pelos scripts SLURM
+    (como o script slurm entregue pelo prof.)
+  PORQUE?
+    Porque as infos do script slurm mostram EXATAMENTE como suas experiencias
+    foram rodaram no cluster, ou seja, mostram a verdade de como rodou;
+    ASSIM eh possivel verificar/determinar se exitiram erros experimentais OU
+    ou erros nos seus programas. 
+  
+  * Minimizar efeitos de cache nas mediçoes:
+     Como faremos as medicoes pelo menos 10 vezes para tirar medias,
+     *conforme feito no trab 1, 
+     devemos fazer a troca de valores no cache a cada de medicao diferente
+     (usar um buffer extra para forçar cache eviction)
+ 
+• SOBRE AS EXPERIÊNCIAS:
+  ---------------------
+• Faremos a computacao total para 3 casos apenas:
+
+USAREMOS NR (numero de repeticoes internas) do programa com valor 10  (mesma coisa do trabalho 1)
+•
+• Experiencia 1: 
+    32000 pivôs, 512 bins, total de elementos 32000000, nr 10
+  Rodar o programa com slurm e MPI (seu script rodar-exp1-1n-8ppn.sh)
+  para APENAS 1 nodo do cluster e 8 processos MPI nesse nodo (total de 8 processo MPI, e 8 particoes)
+  colocar os resultados dessa experiencia no arquivo:
+      saida-slurm-exp1-1n-8ppn.txt
+  importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
+      resultados-exp1-1n-8ppn   
+  (importe com os separadores ADEQUADOS)     
+  
+• Experiencia 2:  
+    32000 pivôs, 512 bins, total de elementos 32000000, nr 10
+  Rodar o programa com slurm e MPI (seu script rodar-exp2-2n-8ppn.sh)
+  para 2 nodos do cluster e 8 processos MPI em cada nodo (total de 16 processo MPI, e 16 particoes)
+  colocar os resultados dessa experiencia no arquivo:
+      saida-slurm-exp2-2n-8ppn.txt
+  importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
+      resultados-exp2-2n-8ppn   
+  (importe com os separadores ADEQUADOS)     
+  
+• Experiencia 3: 
+    32000 pivôs, 512 bins, total de elementos 32000000, nr 10
+  ou seja, o nome resultados-4n-8ppn significa 4 nodos, 8 processos por nodo
+  Rodar o programa com slurm e MPI (seu script rodar-exp3-4n-8ppn.sh)
+  para 4 nodos do cluster e 8 processos MPI em cada nodo (total de 32 processos MPI, e 32 particoes)
+  colocar os resultados dessa experiencia no arquivo:
+      saida-slurm-exp3-4n-8ppn.txt
+  importar esse aquivo .txt para sua planilha na folha de resultados na planilha: 
+      resultados-exp3-4n-8ppn   
+  (importe com os separadores ADEQUADOS)     
+
+O que entregar?
+---------------
+
+- codigo: 
+     * APENAS 1 arquivo com o codigo main e todas as suas funcoes paralelas,
+        INCLUSIVE as do histograma que voce usar.
+     * o único arquivo EXTRA de codigo que deve ser entregue é o
+       chronos,c (ou chronos.h) do prof., que deve ser incluido (via include)
+       no seu programa.
+       
+   . script para compilar (compila.sh, OU um makefile, voce decide!)
+   . scripts para rodar os experimentos (pode se basear nos scripts do prof)
+     esses SAO scripts SLURM com todas aquelas infos adicionais que o slurm vai
+     incluir na sua saida, veja o exemplo de script slurm que o prof entregou
+     e se faça os seus scripts slurms com o mesmo tipo de informacao
+     FACA 1 script separado por experiencia, com nome significativo para cada script!
+          
+   . planilha: 
+       (DEVE se basear nas planilhas do prof de reducao paralela com pool de threads)
+       adaptando a planilha para as nossas experiencias aqui descritas
+       POREM, alem das folhas 3 de resultados da planilha (conform descrito acima)
+       voce DEVE incluir uma folha com uma tabela feita na planilha
+       mostrando os resultados AS 3 EXPERIENCIAS NESSA MESMA folha
+       (a segunda folha da planilha)
+       Essa tabela voce vai inserir no seu relatorio .PDF tambem 
+       
+       ATENCAO: A vazao deve ser CALCULADA pelo proprio programa MPI
+                As médias DEVEM ser calculadas pelo proprio programa MPI
+             
+       ATENCAO 2: 
+         - voce deve incluir na PRIMEIRA pagina das planilhas a saida do comando 
+           lscpu para a maquina usada (nesse caso pode ser da w00)
+         - voce deve incluir TAMBEM na ULTIMA pagina das planilhas a saida do comando 
+           lstopo para a maquina usada (nesse caso pode ser da w00)
+                 (a maquina w00 JÁ TEM o lstopo INSTALADO, 
+                 MAS se voce quer esse binario
+                 eu coloquei o binario desse programa na ufpr virtual, 
+                 basta baixar setar bit de execucao e 
+                 rodar lstopo w00-xeon.pdf 
+                 ele gera o PDF da topologia do processador)
+                 
+      . o RELATORIO
+        SOBRE O RELATÓRIO do trabalho:
+        
+        a) Fazer um relatório (PDF) descrevendo sua implementacao 
+          COMO IMPLEMENTOU, veja que eh uma parte IMPORTANTE porque o prof APENAS
+          informou O QUE, mas nao disse COMO 
+          (o prof. informou apenas os detalhes de especificacao mas nao de implementacao), 
+          entao voce deve descrever os detalhes importantes da sua implementacao.
+        b) Metodologia:
+           - Descreva as características importantes da sua CPU usada 
+           (pode reutilizar partes do relatorio do trabalho 1). 
+           - Descreva os resultados e suas conclusões sobre os resultados obtidos.
+           Inclua a tabela (UMA APENAS) feita na planilha com a sumarizacao dos resultados
+           das experiencias, usando essa tabela para ilustrar suas descricoes de 
+           experimentos e resultados.  
+        c) Conclusoes
+           faca suas conclusoes sobre o trabalho e seus resultados   
+        
+        d) Inclua em APENDICE ao relatório
+           . o texto da saida do comando lscpu 
+           . bem como a figura do comando lstopo para sua CPU usada.              
+                 
+       
+////////////////////////////  
+      
+SELEÇÃO DE PIVÔS:   foi descrita acima.
+----------------
+
+CONSTRUÇÃO DOS LIMITES — DETALHES: foram descritos acima.
+-----------------------------------
+
+O QUE O PROGRAMA REPORTA
+-------------------------
+
+  OBS: o tempo de particionamente inclui tudo que foi necessario para
+       particionar, por exemplo, deve incluir o tempo de histograma,
+       se histogramas sao necessarios para particionar;
+       NOTE QUE, geracao de entrada de dados, pivots e de limites
+       NAO fazem parte do particionamento, entao nao devem ter seu tempo
+       incluido no tempo de particionamento. 
+
+  Por round (tabela):
+      T(part-ser)  tempo do particionamento com 1 thread apenas (serial) 
+              com todo o vetor no processo 0,
+              NOTE que, para fazer isso, o seu programa DEVE
+              juntar no processo 0 todos os pedaços do vetor que 
+              foram gerados de forma independente nos processos MPI.
+              Mas ai voce faz o particionamento desse vetor total nessa thread 0
+              do processo 0 e mede o tempo serial de particionamento.
+               
+      T(np:n1 x nth:n2)   tempo do particionamento usando 
+                           n1 processos MPI e nth threads por processo MPI
+                        EXEMPLO:  
+                            T(np:4 x nth:8) seria o tempo do particionamento
+                                paralelo MPI+pthreads para 4 processos MPI
+                                rodando 8 threads dentro de cada processo MPI.
+                                   
+      Speedup    razão T(part-ser) / T(np:n1 x nth:n2)
+      OK/FAIL    resultado da verificação de corretude
+                 (APENAS CASO -verify seja colocado na linha de comando)
+
+  Sumário final (médias sobre nr rounds):     
+      - Tempo médio T(part-ser) 
+      - Tempo médio T(np:n1 x nth:n2)
+       
+      - Vazao média(part-ser): MEPS 
+           ou seja vazo media do particionamento serial(part-ser) em MEPS
+           OBS: MEPS = (Mega Elements Per Second), onde: Mega = 10^6
+   
+      - Vazao média part-par(np:n1 x nth:n2): MEPS
+           ou seja vazo media do particionamento paralelo part-par(np:n1 x nth:n2) em MEPS
+           OBS: MEPS = (Mega Elements Per Second), onde: Mega = 10^6
+
+      - Speedup médio e eficiência paralela (speedup / nthreads × 100%)
+      - Resultado global de corretude, PASS ou FAIL
+      
+RESTRIÇÕES E NOTAS
+-------------------
+
+  - O programa requer Linux (usa MPI, POSIX threads e C).
+  - npivots deve ser >= nbins para que a seleção de limites igualmente
+    espaçados produza nbins+1 entradas distintas.
+  - SE usar radix sort, requer que todos os valores de pivôs sejam long long
+    com sinal; a ordenação correta de negativos é garantida por XOR do
+    bit mais significativo antes e depois da ordenação.
+    Voce pode usar a mesma ordenacao que usou no trabalho 1,
+    (ou seja, deve ter usado qsort)
+
+========================================================================
+//////////////////////////////
+
+
