@@ -5,3 +5,5 @@
    partições irão se sobrepor? se sim como sera o merge?
 
  - nota: arrumar pthread_exit
+
+ - nota: formatação o mais parecido com a do trabalho 1 possivel
