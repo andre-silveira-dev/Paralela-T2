@@ -1,0 +1,7 @@
+ - Cada processo mpi vai ter n elements ou cada processo mpi vai
+   ter n/p elements para processar?
+
+ - paralelismo e merge: vao ter casos onde as respostas das
+   partições irão se sobrepor? se sim como sera o merge?
+
+ - nota: arrumar pthread_exit
