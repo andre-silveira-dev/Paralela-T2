@@ -5,16 +5,21 @@
 #include <limits.h>
 #include <time.h>
 
+#include "chrono.c"
+
 #define MAX_THREADS 8
 #define CACHE_SIZE_MB 6
 #define EVICTION_MULTIPLIER 3
 
+// variaveis de entrada
 long long int nelements = 0, 
               npivots = 0, 
               nbins = 0, 
               nthreads = 0, 
               nr = 0;
-static int use_tb2 = 0;
+static int use_verify = 0;
+
+// flag para evitar a criação de threads
 static int thread_pool_initialized = 0;
 
 static double get_time(void) {
@@ -23,11 +28,13 @@ static double get_time(void) {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
+// variáveis de gerenciamento de pool
 pthread_barrier_t parallelHisto_barrier;
 int parallelHisto_threads_id[MAX_THREADS];
 pthread_t parallelHisto_thread[MAX_THREADS];
 static int parallelHisto_pool_threads = 0;
 
+// variáveis de dados
 static const long long *parallelHisto_data = NULL;
 static const long long *parallelHisto_limits = NULL;
 static long long **parallelHisto_local_hist = NULL;
@@ -168,20 +175,6 @@ static inline int findBin(const long long *limits, int nbins, long long value) {
 void *histogram(void *ptr){
     int tid = *(int *)ptr;
 
-    if (tid == 0) {
-        pthread_barrier_wait(&parallelHisto_barrier);
-
-        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
-        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
-        for (long long i = start; i < end; i++) {
-            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
-            parallelHisto_local_hist[tid][bin]++;
-        }
-
-        pthread_barrier_wait(&parallelHisto_barrier);
-        return NULL;
-    }
-
     while(1) {
         pthread_barrier_wait(&parallelHisto_barrier);
 
@@ -193,6 +186,8 @@ void *histogram(void *ptr){
         }
 
         pthread_barrier_wait(&parallelHisto_barrier);
+        
+        if(tid == 0) return NULL;
     }
 
     return NULL;
@@ -285,6 +280,7 @@ void prefix_sum(long long * Pos, long long * hist, int nbins){
         Pos[i] = Pos[i-1] + hist[i-1];
 }
 
+
 int parallel_multiPartition(
     const long long  *Input,       /* input array                          */
     long long        *Output,      /* Output array (partitioned per bin)   */
@@ -316,27 +312,27 @@ int parallel_multiPartition(
 
 int validateInputs(){
     if(nelements <= 0){
-        printf("nelements should be bigger than 0, currently: %lld", nelements);
+        printf("nelements should be bigger than 0, currently: %lld\n", nelements);
         return 1;
     }
 
     if(nbins < 1){
-        printf("nbins should be bigger than 1, currently: %lld", nbins);
+        printf("nbins should be bigger than 1, currently: %lld\n", nbins);
         return 1;
     }
 
     if(npivots < nbins || npivots < 2 || npivots > nelements){
-        printf("npivots should be bigger than 2 and %lld, and smaller than %lld, currently: %lld", nbins, nelements, npivots);
+        printf("npivots should be bigger than 2 and %lld, and smaller than %lld, currently: %lld\n", nbins, nelements, npivots);
         return 1;
     }
 
     if(nthreads <= 0 || nthreads > MAX_THREADS){
-        printf("nthreads should be between 1 and %d, currently: %lld", MAX_THREADS, nthreads);
+        printf("nthreads should be between 1 and %d, currently: %lld\n", MAX_THREADS, nthreads);
         return 1;
     }
 
     if(nr <= 0){
-        printf("nr should be bigger than 0, currently: %lld", nr);
+        printf("nr should be bigger than 0, currently: %lld\n", nr);
         return 1;
     }
 
@@ -402,7 +398,7 @@ static int verifyHistogram(
 
 int main(int argc, char* argv[]){
     if(argc < 6 || argc > 7){
-        printf("usage: %s <nelements> <npivots> <nbins> <nthreads> <nr> [-tb2]\n", argv[0]);
+        printf("usage: %s <nelements> <npivots> <nbins> <nthreads> <nr> [-Verify]\n", argv[0]);
         return 0;
     }
 
@@ -412,20 +408,22 @@ int main(int argc, char* argv[]){
     nthreads = atoi(argv[4]);
     nr = atoi(argv[5]);
 
-    use_tb2 = (argc == 7 && strcmp(argv[6], "-tb2") == 0);
+    use_verify = (argc == 7 && strcmp(argv[6], "-Verify") == 0);
     
     if(validateInputs()){
         return 0;
     }
 
+    srand(2025 * 100 + 1); // +1 mas tem que deixar +i
+
     /* Init eviction buffer */
     evictCacheInit();
 
     /* Print header */
-    printf("\n=== Parallel Histogram — Scalability Test (Persistent Thread Pool) ===\n");
-    printf("  Elements : %lld  |  Pivots : %lld  |  Bins : %lld  |  Threads : %lld  |  Rounds : %lld  |  Input : %s\n",
+    printf("\n=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===\n");
+    printf("  Elements : %lld  |  Pivots : %lld  |  Bins : %lld  |  Threads : %lld  |  Rounds : %lld  |  Verify : %s\n",
            nelements, npivots, nbins, nthreads, nr,
-           use_tb2 ? "uniform random in [0,nbins) (-tb2)" : "uniform random long long");
+           use_verify ? "Able" : "Disable");
     printf("  LLC size : %d MiB  |  Eviction buffer : %d MiB\n\n",
            CACHE_SIZE_MB, CACHE_SIZE_MB * EVICTION_MULTIPLIER);
 
@@ -437,6 +435,10 @@ int main(int argc, char* argv[]){
     int    *ok_arr = (int *)   malloc(nr * sizeof(int));
     int all_ok = 1;
 
+    chronometer_t bl_chronometer;
+    chronometer_t sthr_chronometer;
+    chronometer_t nthr_chronometer;
+
     /* Print round table header */
     printf("  Round ;  T(bl_ser) s ;  T(1 thr) s ;   T(N thr) s ;    Speedup ; OK?\n");
     printf("  ----- ;------------ ;------------ ;------------ ;------------ ;---------- ; ----\n");
@@ -446,12 +448,7 @@ int main(int argc, char* argv[]){
         long long *data = (long long *)malloc(sizeof(long long) * nelements);
         if (!data) { fprintf(stderr, "malloc failed\n"); return 1; }
 
-        if (use_tb2) {
-            gen_test_data_balanced2(data, nelements, nbins);
-        } else {
-            for (long long i = 0; i < nelements; i++)
-                data[i] = rand64();
-        }
+        gen_test_data_balanced2(data, nelements, nbins);
 
         long long *pivots = (long long *)malloc(sizeof(long long) * npivots);
         long long *limits = (long long *)malloc(sizeof(long long) * (nbins + 1));
@@ -464,10 +461,13 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
-        double t0 = get_time();
+        chrono_reset(&bl_chronometer);
+        chrono_reset(&sthr_chronometer);
+        chrono_reset(&nthr_chronometer);
+
+        chrono_start(&bl_chronometer);
         build_limits_sp2_serial(data, nelements, npivots, nbins, pivots, limits);
-        double t1 = get_time();
-        t_bl[r] = t1 - t0;
+        chrono_stop(&bl_chronometer);
 
         /* Print 8 bins */
 /*        if (r == 0) {
@@ -502,13 +502,12 @@ int main(int argc, char* argv[]){
         nbins = 4;
 
         /* Histograma 1-thread */
-        t0 = get_time();
-        parallel_multiPartition(Input, Output_1, nelements, Limits_teste, nbins, Pos, 1);
-        t1 = get_time();
-        t_1thr[r] = t1 - t0;
+        chrono_start(&sthr_chronometer);
+        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, 1);
+        chrono_stop(&sthr_chronometer);
 
         /* saida dos testes */
-        printf("Output: [");
+/*        printf("Output: [");
         for(int i = 0; i < nelements; i++)
             printf("%lld ", Output_1[i]);
         printf("]\n");
@@ -517,26 +516,41 @@ int main(int argc, char* argv[]){
         for(int i = 0; i < nbins; i++)
             printf("%lld ", Pos[i]);
         printf("]\n");
-
+*/
         /* Limpar cache antes de exec de N-thread */
         evictCache();
 
         /* Histograma N-thread*/
-/*        t0 = get_time();
-        parallelHistogram(data, nelements, limits, nbins, hist_n, nthreads);
-        t1 = get_time();
-        t_nthr[r] = t1 - t0;
+        chrono_start(&nthr_chronometer);
+        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, nthreads);
+        chrono_stop(&nthr_chronometer);
+
+        /* saida dos testes */
+/*        printf("Output: [");
+        for(int i = 0; i < nelements; i++)
+            printf("%lld ", Output_1[i]);
+        printf("]\n");
+
+        printf("Pos: [");
+        for(int i = 0; i < nbins; i++)
+            printf("%lld ", Pos[i]);
+        printf("]\n");
 */
+
         /* Checar */
-/*        ok_arr[r] = verifyHistogram(data,Helements, limits, nbins, hist_1, hist_n);
-        if (!ok_arr[r]) all_ok = 0;
+//        ok_arr[r] = verifyHistogram(data,Helements, limits, nbins, hist_1, hist_n);
+//        if (!ok_arr[r]) all_ok = 0;
+
+        t_bl[r]   = (double) chrono_gettotal(&bl_chronometer) / (double)1e9;
+        t_1thr[r] = (double) chrono_gettotal(&sthr_chronometer) / (double)1e9;
+        t_nthr[r] = (double) chrono_gettotal(&nthr_chronometer) / (double)1e9;
 
         spdup[r] = t_1thr[r] / t_nthr[r];
 
         printf("  %-5d ;  %12.6f ;  %12.6f ;  %12.6f ;  %9.3f ; %s\n",
                r + 1, t_bl[r], t_1thr[r], t_nthr[r], spdup[r],
                ok_arr[r] ? "OK" : "FAIL");
-*/
+
         free(data);
         free(pivots);
         free(limits);
