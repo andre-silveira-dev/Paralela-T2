@@ -136,14 +136,67 @@ static void build_limits_sp2_serial(const long long *data,
         limits[k] = pivots[k*step];
     }
 
-    for (int k = 1; k <= nbins - 1; k++)
-        if (limits[k] <= limits[k - 1])
+    for (int k = 1; k <= nbins - 1; k++){
+        if (limits[k] <= limits[k - 1]){
             if (limits[k - 1] < LLONG_MAX - 1)
                 limits[k] = limits[k - 1] + 1;
             else
                 limits[k] = limits[k - 1];
+        }
+    }
 }
 
+static inline int findBin(const long long *limits, int nbins, long long value) {
+    int lo = 0;
+    int hi = nbins;
+
+    while (lo + 1 < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (value < limits[mid]) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+
+    if (lo < 0) return 0;
+    if (lo >= nbins) return nbins - 1;
+    return lo;
+}
+
+
+void *histogram(void *ptr){
+    int tid = *(int *)ptr;
+
+    if (tid == 0) {
+        pthread_barrier_wait(&parallelHisto_barrier);
+
+        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
+        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
+        for (long long i = start; i < end; i++) {
+            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
+            parallelHisto_local_hist[tid][bin]++;
+        }
+
+        pthread_barrier_wait(&parallelHisto_barrier);
+        return NULL;
+    }
+
+    while(1) {
+        pthread_barrier_wait(&parallelHisto_barrier);
+
+        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
+        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
+        for (long long i = start; i < end; i++) {
+            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
+            parallelHisto_local_hist[tid][bin]++;
+        }
+
+        pthread_barrier_wait(&parallelHisto_barrier);
+    }
+
+    return NULL;
+}
 
 int parallelHistogram(
     const long long  *data,
@@ -226,6 +279,40 @@ int parallelHistogram(
     return 0;
 }
 
+void prefix_sum(long long * Pos, long long * hist, int nbins){
+    Pos[0] = 0;
+    for(int i = 1; i < nbins; i++)
+        Pos[i] = Pos[i-1] + hist[i-1];
+}
+
+int parallel_multiPartition(
+    const long long  *Input,       /* input array                          */
+    long long        *Output,      /* Output array (partitioned per bin)   */
+    long long         nElements,   /* number of elements                   */
+    const long long  *Limits,      /* bin boundaries, size nbins+1         */
+    int               nbins,       /* number of bins                       */
+    long long        *Pos,         /* output histogram, size nbins         */
+    int               nthreads     /* number of threads (1 = serial path)  */
+){
+    long long * local_histogram = (long long *)malloc(nbins * sizeof(long long));
+    long long * next            = (long long *)malloc(nbins * sizeof(long long));
+
+    parallelHistogram(Input, nElements, Limits, nbins, local_histogram, nthreads);
+    prefix_sum(Pos, local_histogram, nbins);
+
+    memcpy(next, Pos, sizeof(long long) * nbins);
+
+    for(int i = 0; i < nElements; i++){
+        int bin = findBin(Limits, nbins, Input[i]);
+        Output[next[bin]] = Input[i];
+        next[bin]++;
+    }
+
+    free(local_histogram);
+    free(next);
+
+    return 0;
+}
 
 int validateInputs(){
     if(nelements <= 0){
@@ -254,59 +341,6 @@ int validateInputs(){
     }
 
     return 0;
-}
-
-
-static inline int findBin(const long long *limits, int nbins, long long value) {
-    int lo = 0;
-    int hi = nbins;
-
-    while (lo + 1 < hi) {
-        int mid = lo + (hi - lo) / 2;
-        if (value < limits[mid]) {
-            hi = mid;
-        } else {
-            lo = mid;
-        }
-    }
-
-    if (lo < 0) return 0;
-    if (lo >= nbins) return nbins - 1;
-    return lo;
-}
-
-
-void *histogram(void *ptr){
-    int tid = *(int *)ptr;
-
-    if (tid == 0) {
-        pthread_barrier_wait(&parallelHisto_barrier);
-
-        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
-        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
-        for (long long i = start; i < end; i++) {
-            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
-            parallelHisto_local_hist[tid][bin]++;
-        }
-
-        pthread_barrier_wait(&parallelHisto_barrier);
-        return NULL;
-    }
-
-    while(1) {
-        pthread_barrier_wait(&parallelHisto_barrier);
-
-        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
-        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
-        for (long long i = start; i < end; i++) {
-            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
-            parallelHisto_local_hist[tid][bin]++;
-        }
-
-        pthread_barrier_wait(&parallelHisto_barrier);
-    }
-
-    return NULL;
 }
 
 
@@ -421,10 +455,11 @@ int main(int argc, char* argv[]){
 
         long long *pivots = (long long *)malloc(sizeof(long long) * npivots);
         long long *limits = (long long *)malloc(sizeof(long long) * (nbins + 1));
-        long long *hist_1 = (long long *)calloc(nbins, sizeof(long long));
-        long long *hist_n = (long long *)calloc(nbins, sizeof(long long));
+        long long *Output_1 = (long long *)calloc(nelements, sizeof(long long));
+        long long *Output_n = (long long *)calloc(nelements, sizeof(long long));
+        long long *Pos      = (long long *)malloc(sizeof(long long) * nbins);
 
-        if (!pivots || !limits || !hist_1 || !hist_n) {
+        if (!pivots || !limits || !Output_1 || !Output_n || !Pos) {
             fprintf(stderr, "Memory allocation failed\n");
             return 1;
         }
@@ -435,7 +470,7 @@ int main(int argc, char* argv[]){
         t_bl[r] = t1 - t0;
 
         /* Print 8 bins */
-        if (r == 0) {
+/*        if (r == 0) {
             int show = nbins < 8 ? nbins : 8;
             printf("\n  --- Round 1: first %d partitions ---\n", show);
             printf("   Bin  ;          Lo (inclusive)  ;          Hi (exclusive)  ;         Count\n");
@@ -457,27 +492,43 @@ int main(int argc, char* argv[]){
             printf("  Round ;  T(bl_ser) s ;  T(1 thr) s ;   T(N thr) s ;    Speedup ; OK?\n");
             printf("  ----- ;------------ ;------------ ;------------ ;------------ ;---------- ; ----\n");
         }
-
+*/
         /* Limpar cache antes de exec de 1-thread */
         evictCache();
 
+        /* dados para testes */
+        long long Input [14] = {8, 4, 13, 7, 11, 100, 44, 3, 7, 7, 100, 110, 46, 44};
+        long long Limits_teste[5] = {LLONG_MIN, 12, 70, 90, LLONG_MAX};
+        nbins = 4;
+
         /* Histograma 1-thread */
         t0 = get_time();
-        parallelHistogram(data, nelements, limits, nbins, hist_1, 1);
+        parallel_multiPartition(Input, Output_1, nelements, Limits_teste, nbins, Pos, 1);
         t1 = get_time();
         t_1thr[r] = t1 - t0;
+
+        /* saida dos testes */
+        printf("Output: [");
+        for(int i = 0; i < nelements; i++)
+            printf("%lld ", Output_1[i]);
+        printf("]\n");
+
+        printf("Pos: [");
+        for(int i = 0; i < nbins; i++)
+            printf("%lld ", Pos[i]);
+        printf("]\n");
 
         /* Limpar cache antes de exec de N-thread */
         evictCache();
 
         /* Histograma N-thread*/
-        t0 = get_time();
+/*        t0 = get_time();
         parallelHistogram(data, nelements, limits, nbins, hist_n, nthreads);
         t1 = get_time();
         t_nthr[r] = t1 - t0;
-
+*/
         /* Checar */
-        ok_arr[r] = verifyHistogram(data,Helements, limits, nbins, hist_1, hist_n);
+/*        ok_arr[r] = verifyHistogram(data,Helements, limits, nbins, hist_1, hist_n);
         if (!ok_arr[r]) all_ok = 0;
 
         spdup[r] = t_1thr[r] / t_nthr[r];
@@ -485,16 +536,16 @@ int main(int argc, char* argv[]){
         printf("  %-5d ;  %12.6f ;  %12.6f ;  %12.6f ;  %9.3f ; %s\n",
                r + 1, t_bl[r], t_1thr[r], t_nthr[r], spdup[r],
                ok_arr[r] ? "OK" : "FAIL");
-
+*/
         free(data);
         free(pivots);
         free(limits);
-        free(hist_1);
-        free(hist_n);
+        free(Output_1);
+        free(Output_n);
     }
 
     /* Compute averages */
-    double avg_bl = 0, avg_1 = 0, avg_n = 0, avg_sp = 0;
+/*    double avg_bl = 0, avg_1 = 0, avg_n = 0, avg_sp = 0;
     for (int r = 0; r < nr; r++) {
         avg_bl += t_bl[r];
         avg_1  += t_1thr[r];
@@ -532,6 +583,6 @@ int main(int argc, char* argv[]){
     free(spdup);
     free(ok_arr);
     free((void *)eviction_buffer);
-
+*/
     return 0;
 }
