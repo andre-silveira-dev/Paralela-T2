@@ -297,6 +297,7 @@ int parallel_multiPartition(
     prefix_sum(Pos, local_histogram, nbins);
 
     memcpy(next, Pos, sizeof(long long) * nbins);
+    memset(next, 0, sizeof(long long) * nbins);
 
     for(int i = 0; i < nElements; i++){
         int bin = findBin(Limits, nbins, Input[i]);
@@ -522,7 +523,7 @@ int main(int argc, char* argv[]){
 
         /* Histograma N-thread*/
         chrono_start(&nthr_chronometer);
-        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, nthreads);
+        parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
         chrono_stop(&nthr_chronometer);
 
         /* saida dos testes */
