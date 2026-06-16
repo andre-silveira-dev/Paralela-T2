@@ -12,4 +12,5 @@
  - Como deveria ser a implementação da função de verificação?
    por que tem um parâmetro paralelo na assinatura?
 
- 
+16/06 (André) =========================
+ - Segmentation Fault (Core Dumped) quando tentamos executar

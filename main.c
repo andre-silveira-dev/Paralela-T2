@@ -22,12 +22,6 @@ static int use_verify = 0;
 // flag para evitar a criação de threads
 static int thread_pool_initialized = 0;
 
-static double get_time(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec + ts.tv_nsec * 1e-9;
-}
-
 // variáveis de gerenciamento de pool
 pthread_barrier_t parallelHisto_barrier;
 int parallelHisto_threads_id[MAX_THREADS];
@@ -41,6 +35,7 @@ static long long **parallelHisto_local_hist = NULL;
 static long long parallelHisto_nelements = 0;
 static int parallelHisto_nbins = 0;
 static int parallelHisto_active_threads = 1;
+static int local_partition_verify_ok = 1;
 
 
 static inline unsigned long long rand63(void) {
@@ -310,6 +305,82 @@ int parallel_multiPartition(
     return 0;
 }
 
+void verifica_particoesLocais(
+    const long long  *Input,       /* input array                          */
+    long long        *Output,      /* Output array (partitioned per bin)   */
+    long long         nElements,   /* number of elements                   */
+    const long long  *Limits,      /* bin boundaries, size nbins+1         */
+    int               nbins,       /* number of bins                       */
+    long long        *Pos,         /* output histogram, size nbins         */
+    int               nthreads     /* number of threads (1 = serial path)  */
+){
+    int correct = 1;
+
+    if (nbins <= 0 || nElements < 0 || !Limits || !Pos || !Output) {
+        fprintf(stderr, "      ===> particionamento local COM ERROS no rank 0\n");
+        local_partition_verify_ok = 0;
+        return;
+    }
+
+    if (Pos[0] != 0) {
+        correct = 0;
+    }
+
+    for (int b = 1; b < nbins; b++) {
+        if (Pos[b] < 0 || Pos[b] < Pos[b - 1] || Pos[b] > nElements) {
+            correct = 0;
+            break;
+        }
+    }
+
+    if (Pos[nbins - 1] > nElements) {
+        correct = 0;
+    }
+
+    if (correct) {
+        for (int b = 0; b < nbins; b++) {
+            bool lastBin = (b == nbins - 1);
+            long long start = Pos[b];
+            long long end = lastBin ? nElements : Pos[b + 1];
+            long long low = Limits[b];
+            long long high = Limits[b + 1];
+
+            if (start < 0 || end < start || end > nElements) {
+                correct = 0;
+                break;
+            }
+
+            for (long long i = start; i < end; i++) {
+                long long value = Output[i];
+                if (lastBin) {
+                    if (value < low || value > high) {
+                        correct = 0;
+                        break;
+                    }
+                } 
+                else {
+                    if (value < low || value >= high) {
+                        correct = 0;
+                        break;
+                    }
+                }
+            }
+
+            if (!correct) {
+                break;
+            }
+        }
+    }
+
+    if (correct) {
+        printf("      ===> particionamento local CORRETO no rank 0\n");
+        local_partition_verify_ok = 1;
+    } else {
+        printf("      ===> particionamento local COM ERROS no rank 0\n");
+        local_partition_verify_ok = 0;
+    }
+}
+
 int validateInputs(){
     if(nelements <= 0){
         printf("nelements should be bigger than 0, currently: %lld\n", nelements);
@@ -340,61 +411,61 @@ int validateInputs(){
 }
 
 
-static int verifyHistogram(
-    const long long *data,
-    long long        nelements,
-    const long long *limits,
-    int              nbins,
-    const long long *hist_1thr,
-    const long long *hist_nthr)
-{
-    /* Stage 1: 1-thread vs N-thread */
-    int s1_ok = 1;
-    for (int b = 0; b < nbins; b++) {
-        if (hist_1thr[b] != hist_nthr[b]) {
-            fprintf(stderr,
-                    "  VERIFY FAIL stage1: bin %d  1thr=%lld  Nthr=%lld\n",
-                    b, hist_1thr[b], hist_nthr[b]);
-            s1_ok = 0;
-        }
-    }
-    if (!s1_ok) return 0;
+// static int verifyHistogram(
+//     const long long *data,
+//     long long        nelements,
+//     const long long *limits,
+//     int              nbins,
+//     const long long *hist_1thr,
+//     const long long *hist_nthr)
+// {
+//     /* Stage 1: 1-thread vs N-thread */
+//     int s1_ok = 1;
+//     for (int b = 0; b < nbins; b++) {
+//         if (hist_1thr[b] != hist_nthr[b]) {
+//             fprintf(stderr,
+//                     "  VERIFY FAIL stage1: bin %d  1thr=%lld  Nthr=%lld\n",
+//                     b, hist_1thr[b], hist_nthr[b]);
+//             s1_ok = 0;
+//         }
+//     }
+//     if (!s1_ok) return 0;
 
-    /* Stage 2: serial recount vs hist_nthr */
-    long long *recount = (long long *)calloc(nbins, sizeof(long long));
-    if (!recount) { perror("calloc recount"); return 0; }
+//     /* Stage 2: serial recount vs hist_nthr */
+//     long long *recount = (long long *)calloc(nbins, sizeof(long long));
+//     if (!recount) { perror("calloc recount"); return 0; }
 
-    for (long long i = 0; i < nelements; i++) {
-        long long v = data[i];
-        int b = 0;
-        while (b < nbins - 1 && v >= limits[b + 1]) b++;
-        recount[b]++;
-    }
+//     for (long long i = 0; i < nelements; i++) {
+//         long long v = data[i];
+//         int b = 0;
+//         while (b < nbins - 1 && v >= limits[b + 1]) b++;
+//         recount[b]++;
+//     }
 
-    int s2_ok = 1;
-    for (int b = 0; b < nbins; b++) {
-        if (recount[b] != hist_nthr[b]) {
-            fprintf(stderr,
-                    "  VERIFY FAIL stage2: bin %d  recount=%lld  Nthr=%lld\n",
-                    b, recount[b], hist_nthr[b]);
-            s2_ok = 0;
-        }
-    }
-    free(recount);
-    if (!s2_ok) return 0;
+//     int s2_ok = 1;
+//     for (int b = 0; b < nbins; b++) {
+//         if (recount[b] != hist_nthr[b]) {
+//             fprintf(stderr,
+//                     "  VERIFY FAIL stage2: bin %d  recount=%lld  Nthr=%lld\n",
+//                     b, recount[b], hist_nthr[b]);
+//             s2_ok = 0;
+//         }
+//     }
+//     free(recount);
+//     if (!s2_ok) return 0;
 
-    /* Stage 3: sum of bins == nelements */
-    long long total = 0;
-    for (int b = 0; b < nbins; b++) total += hist_nthr[b];
-    if (total != nelements) {
-        fprintf(stderr,
-                "  VERIFY FAIL stage3: sum=%lld expected=%lld\n",
-                total, nelements);
-        return 0;
-    }
+//     /* Stage 3: sum of bins == nelements */
+//     long long total = 0;
+//     for (int b = 0; b < nbins; b++) total += hist_nthr[b];
+//     if (total != nelements) {
+//         fprintf(stderr,
+//                 "  VERIFY FAIL stage3: sum=%lld expected=%lld\n",
+//                 total, nelements);
+//         return 0;
+//     }
 
-    return 1;
-}
+//     return 1;
+// }
 
 int main(int argc, char* argv[]){
     if(argc < 6 || argc > 7){
@@ -433,7 +504,7 @@ int main(int argc, char* argv[]){
     double *t_nthr = (double *)malloc(nr * sizeof(double));
     double *spdup  = (double *)malloc(nr * sizeof(double));
     int    *ok_arr = (int *)   malloc(nr * sizeof(int));
-    int all_ok = 1;
+    // int all_ok = 1;
 
     chronometer_t bl_chronometer;
     chronometer_t sthr_chronometer;
@@ -496,11 +567,6 @@ int main(int argc, char* argv[]){
         /* Limpar cache antes de exec de 1-thread */
         evictCache();
 
-        /* dados para testes */
-        long long Input [14] = {8, 4, 13, 7, 11, 100, 44, 3, 7, 7, 100, 110, 46, 44};
-        long long Limits_teste[5] = {LLONG_MIN, 12, 70, 90, LLONG_MAX};
-        nbins = 4;
-
         /* Histograma 1-thread */
         chrono_start(&sthr_chronometer);
         parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, 1);
@@ -522,8 +588,14 @@ int main(int argc, char* argv[]){
 
         /* Histograma N-thread*/
         chrono_start(&nthr_chronometer);
-        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, nthreads);
+        parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
         chrono_stop(&nthr_chronometer);
+
+        local_partition_verify_ok = 1;
+        if (use_verify) {
+            verifica_particoesLocais(data, Output_n, nelements, limits, nbins, Pos, nthreads);
+        }
+        ok_arr[r] = local_partition_verify_ok;
 
         /* saida dos testes */
 /*        printf("Output: [");
@@ -556,6 +628,9 @@ int main(int argc, char* argv[]){
         free(limits);
         free(Output_1);
         free(Output_n);
+        chrono_reset(&bl_chronometer);
+        chrono_reset(&sthr_chronometer);
+        chrono_reset(&nthr_chronometer);
     }
 
     /* Compute averages */
