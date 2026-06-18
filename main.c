@@ -20,7 +20,8 @@ long long int nelements = 0,
 static int use_verify = 0;
 
 // flag para evitar a criação de threads
-static int thread_pool_initialized = 0;
+static int Histo_thread_pool_initialized = 0;
+static int MP_thread_pool_initialized = 0;
 
 static double get_time(void) {
     struct timespec ts;
@@ -30,14 +31,20 @@ static double get_time(void) {
 
 // variáveis de gerenciamento de pool
 pthread_barrier_t parallelHisto_barrier;
+pthread_barrier_t parallelMP_barrier;
 int parallelHisto_threads_id[MAX_THREADS];
+int parallelMP_threads_id[MAX_THREADS];
 pthread_t parallelHisto_thread[MAX_THREADS];
+pthread_t parallelMP_thread[MAX_THREADS];
 static int parallelHisto_pool_threads = 0;
+static int parallelMP_pool_threads = 0;
 
 // variáveis de dados
 static const long long *parallelHisto_data = NULL;
 static const long long *parallelHisto_limits = NULL;
 static long long **parallelHisto_local_hist = NULL;
+static long long **parallelMP_local_pos = NULL;
+static long long *parallelMP_global_pos = NULL;
 static long long parallelHisto_nelements = 0;
 static int parallelHisto_nbins = 0;
 static int parallelHisto_active_threads = 1;
@@ -193,6 +200,27 @@ void *histogram(void *ptr){
     return NULL;
 }
 
+void *build_output(void *ptr){
+    int tid = *(int *)ptr;
+
+    while(1) {
+        pthread_barrier_wait(&parallelMP_barrier);
+
+        long long start = ((long long)tid * parallelHisto_nelements) / parallelHisto_active_threads;
+        long long end = ((long long)(tid + 1) * parallelHisto_nelements) / parallelHisto_active_threads;
+        for (long long i = start; i < end; i++) {
+            int bin = findBin(parallelHisto_limits, parallelHisto_nbins, parallelHisto_data[i]);
+            
+        }
+
+        pthread_barrier_wait(&parallelMP_barrier);
+        
+        if(tid == 0) return NULL;
+    }
+
+    return NULL;
+}
+
 int parallelHistogram(
     const long long  *data,
     long long         nelements,
@@ -217,7 +245,7 @@ int parallelHistogram(
         return 1;
     }
 
-    if (!thread_pool_initialized) {
+    if (!Histo_thread_pool_initialized) {
         pthread_barrier_init(&parallelHisto_barrier, NULL, nthreads);
 
         parallelHisto_pool_threads = nthreads;
@@ -227,7 +255,7 @@ int parallelHistogram(
             pthread_create(&parallelHisto_thread[i], NULL, histogram, &parallelHisto_threads_id[i]);
         }
 
-        thread_pool_initialized = 1;
+        Histo_thread_pool_initialized = 1;
     } else if (nthreads != parallelHisto_pool_threads) {
         return 1;
     }
@@ -265,9 +293,26 @@ int parallelHistogram(
         hist[b] = sum;
     }
 
-    for (int t = 0; t < nthreads; t++) {
-        free(parallelHisto_local_hist[t]);
+    prefix_sum(parallelMP_global_pos, hist, nbins);
+
+    if (!MP_thread_pool_initialized) {
+        pthread_barrier_init(&parallelHisto_barrier, NULL, nthreads);
+
+        parallelMP_pool_threads = nthreads;
+        parallelMP_threads_id[0] = 0;
+        for (int i = 1; i < nthreads; i++) {
+            parallelMP_threads_id[i] = i;
+            pthread_create(&parallelHisto_thread[i], NULL, build_output, &parallelMP_threads_id[i]);
+        }
+
+        MP_thread_pool_initialized = 1;
+    } else if (nthreads != parallelMP_pool_threads) {
+        return 1;
     }
+
+    // for (int t = 0; t < nthreads; t++) {
+    //     free(parallelHisto_local_hist[t]);
+    // }
     free(parallelHisto_local_hist);
     parallelHisto_local_hist = NULL;
 
@@ -294,16 +339,6 @@ int parallel_multiPartition(
     long long * next            = (long long *)malloc(nbins * sizeof(long long));
 
     parallelHistogram(Input, nElements, Limits, nbins, local_histogram, nthreads);
-    prefix_sum(Pos, local_histogram, nbins);
-
-    memcpy(next, Pos, sizeof(long long) * nbins);
-    memset(next, 0, sizeof(long long) * nbins);
-
-    for(int i = 0; i < nElements; i++){
-        int bin = findBin(Limits, nbins, Input[i]);
-        Output[next[bin]] = Input[i];
-        next[bin]++;
-    }
 
     free(local_histogram);
     free(next);
@@ -523,7 +558,7 @@ int main(int argc, char* argv[]){
 
         /* Histograma N-thread*/
         chrono_start(&nthr_chronometer);
-        parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
+        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, nthreads);
         chrono_stop(&nthr_chronometer);
 
         /* saida dos testes */
