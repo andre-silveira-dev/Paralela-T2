@@ -3,8 +3,7 @@
 
  - paralelismo e merge: vao ter casos onde as respostas das
    partições irão se sobrepor? se sim como sera o merge?
-
- - nota: arrumar pthread_exit
+        - eu não lembro a resposta disso tem que perguntar de novo T-T
 
  - nota: formatação o mais parecido com a do trabalho 1 possivel
 
@@ -14,3 +13,14 @@
 
 16/06 (André) =========================
  - Segmentation Fault (Core Dumped) quando tentamos executar
+ 
+19/06 (Andreus) =======================
+
+ - [ ] Incluir função de validação no código
+ - [ ] Comunicação MPI (geração de dados e output final)
+ - [ ] Validar variáveis de temporização
+ - [ ] Arrumar saída para imprimir tudo que precisa ser impresso
+ - [ ] Realizar testes
+ - [ ] Construir planilha
+ - [ ] Escrever relatório
+ - [ ] Entrar de férias por que o homem está cansado
