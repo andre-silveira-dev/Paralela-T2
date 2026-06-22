@@ -5,7 +5,7 @@
 #include <limits.h>
 #include <time.h>
 
-#include "chrono.c"
+//#include "chrono.c"
 
 #define MAX_THREADS 8
 #define CACHE_SIZE_MB 3
@@ -51,12 +51,10 @@ long long *multi_partition_mpi(
 
     int *sendcounts = calloc(nproc, sizeof(int));
 
-    for (int bin = 0; bin < nbins; bin++)
-    {
+    for (int bin = 0; bin < nbins; bin++) {
         int dest = bin / bins_per_rank;
 
-        long long size =
-            bin_size(bin, Pos, nElements, nbins);
+        long long size = bin_size(bin, Pos, nElements, nbins);
 
         sendcounts[dest] += (int)size;
     }
@@ -69,11 +67,8 @@ long long *multi_partition_mpi(
 
     int *sdispls = calloc(nproc, sizeof(int));
 
-    for (int i = 1; i < nproc; i++)
-    {
-        sdispls[i] =
-            sdispls[i - 1] +
-            sendcounts[i - 1];
+    for (int i = 1; i < nproc; i++) {
+        sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
     }
 
     /*
@@ -82,27 +77,26 @@ long long *multi_partition_mpi(
      * ============================================================
      */
 
-    long long *sendbuf =
-        malloc(nElements * sizeof(long long));
+    long long *sendbuf = malloc(nElements * sizeof(long long));
 
     int *cursor = calloc(nproc, sizeof(int));
 
-    for (int i = 0; i < nproc; i++)
+    for (int i = 0; i < nproc; i++) {
         cursor[i] = sdispls[i];
-
-    for (int bin = 0; bin < nbins; bin++)
-    {
+    }
+    
+    for (int bin = 0; bin < nbins; bin++) {
         int dest = bin / bins_per_rank;
 
         long long begin = Pos[bin];
 
-        long long size =
-            bin_size(bin, Pos, nElements, nbins);
+        long long size = bin_size(bin, Pos, nElements, nbins);
 
         memcpy(
             &sendbuf[cursor[dest]],
             &Output[begin],
-            size * sizeof(long long));
+            size * sizeof(long long)
+        );
 
         cursor[dest] += size;
     }
@@ -124,15 +118,13 @@ long long *multi_partition_mpi(
         recvcounts,
         1,
         MPI_INT,
-        comm);
+        comm
+    );
 
     int *recvdispls = calloc(nproc, sizeof(int));
 
-    for (int i = 1; i < nproc; i++)
-    {
-        recvdispls[i] =
-            recvdispls[i - 1] +
-            recvcounts[i - 1];
+    for (int i = 1; i < nproc; i++) {
+        recvdispls[i] = recvdispls[i - 1] + recvcounts[i - 1];
     }
 
     int total_recv = 0;
@@ -140,8 +132,7 @@ long long *multi_partition_mpi(
     for (int i = 0; i < nproc; i++)
         total_recv += recvcounts[i];
 
-    long long *recvbuf =
-        malloc((size_t)total_recv * sizeof(long long));
+    long long *recvbuf = malloc((size_t)total_recv * sizeof(long long));
 
     /*
      * ============================================================
@@ -154,13 +145,12 @@ long long *multi_partition_mpi(
         sendcounts,
         sdispls,
         MPI_LONG_LONG,
-
         recvbuf,
         recvcounts,
         recvdispls,
         MPI_LONG_LONG,
-
-        comm);
+        comm
+    );
 
     /*
      * ============================================================
@@ -323,6 +313,144 @@ static void build_limits_sp2_serial(const long long *data,
                 limits[k] = limits[k - 1];
         }
     }
+}
+
+
+static void generate_local_pivots(
+    const long long *data,
+    long long n_local,
+    int npivots_local,
+    long long *pivots_local)
+{
+    unsigned long long stride = n_local / npivots_local;
+
+    for(int i = 0; i < npivots_local; i++)
+    {
+        long long jitter_i =
+            (long long)(rand63() % stride);
+
+        pivots_local[i] =
+            data[i * stride + jitter_i];
+    }
+}
+
+void build_limits_mpi(
+    const long long *data,
+    long long n_local,
+    int npivots,
+    int nbins,
+    long long *limits,
+    MPI_Comm comm)
+{
+    int rank;
+    int nproc;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &nproc);
+
+    if(npivots % nproc != 0) {
+        if(rank == 0) {
+            fprintf(
+                stderr,
+                "Erro: npivots (%d) deve ser multiplo de nproc (%d)\n",
+                npivots,
+                nproc
+            );
+        }
+
+        MPI_Abort(comm, 1);
+    }
+
+    int npivots_local = npivots / nproc;
+
+    /*
+     * ============================================================
+     * Gera pivôs locais
+     * ============================================================
+     */
+
+    long long *pivots_local = malloc(npivots_local * sizeof(long long));
+
+    generate_local_pivots(
+        data,
+        n_local,
+        npivots_local,
+        pivots_local
+    );
+
+    /*
+     * ============================================================
+     * Gather dos pivôs
+     * ============================================================
+     */
+
+    long long *all_pivots = NULL;
+
+    if(rank == 0) {
+        all_pivots = malloc(npivots * sizeof(long long));
+    }
+
+    MPI_Gather(
+        pivots_local,
+        npivots_local,
+        MPI_LONG_LONG,
+        all_pivots,
+        npivots_local,
+        MPI_LONG_LONG,
+        0,
+        comm
+    );
+
+    /*
+     * ============================================================
+     * Rank 0 gera os limites
+     * ============================================================
+     */
+
+    if(rank == 0) {
+        qsort(
+            all_pivots,
+            npivots,
+            sizeof(long long),
+            cmp_ll
+        );
+
+        limits[0] = LLONG_MIN;
+        limits[nbins] = LLONG_MAX;
+
+        int step = npivots / (nbins - 1);
+
+        for(int k = 1; k < nbins; k++) {
+            limits[k] = all_pivots[k * step];
+        }
+
+        for(int k = 1; k <= nbins - 1; k++) {
+            if(limits[k] <= limits[k - 1]) {
+                if(limits[k - 1] < LLONG_MAX - 1)
+                    limits[k] = limits[k - 1] + 1;
+                else
+                    limits[k] = limits[k - 1];
+            }
+        }
+
+        free(all_pivots);
+    }
+
+    /*
+     * ============================================================
+     * Broadcast dos limites
+     * ============================================================
+     */
+
+    MPI_Bcast(
+        limits,
+        nbins + 1,
+        MPI_LONG_LONG,
+        0,
+        comm
+    );
+
+    free(pivots_local);
 }
 
 
@@ -717,63 +845,6 @@ int validateInputs(){
     return 0;
 }
 
-/*
-static int verifyHistogram(
-    const long long *data,
-    long long        nelements,
-    const long long *limits,
-    int              nbins,
-    const long long *hist_1thr,
-    const long long *hist_nthr)
-{
-    // Stage 1: 1-thread vs N-thread
-    int s1_ok = 1;
-    for (int b = 0; b < nbins; b++) {
-        if (hist_1thr[b] != hist_nthr[b]) {
-            fprintf(stderr,
-                    "  VERIFY FAIL stage1: bin %d  1thr=%lld  Nthr=%lld\n",
-                    b, hist_1thr[b], hist_nthr[b]);
-            s1_ok = 0;
-        }
-    }
-    if (!s1_ok) return 0;
-
-    //  Stage 2: serial recount vs hist_nthr 
-    long long *recount = (long long *)calloc(nbins, sizeof(long long));
-    if (!recount) { perror("calloc recount"); return 0; }
-
-//     for (long long i = 0; i < nelements; i++) {
-//         long long v = data[i];
-//         int b = 0;
-//         while (b < nbins - 1 && v >= limits[b + 1]) b++;
-//         recount[b]++;
-//     }
-
-//     int s2_ok = 1;
-//     for (int b = 0; b < nbins; b++) {
-//         if (recount[b] != hist_nthr[b]) {
-//             fprintf(stderr,
-//                     "  VERIFY FAIL stage2: bin %d  recount=%lld  Nthr=%lld\n",
-//                     b, recount[b], hist_nthr[b]);
-//             s2_ok = 0;
-//         }
-//     }
-//     free(recount);
-//     if (!s2_ok) return 0;
-
-    // Stage 3: sum of bins == nelements
-    long long total = 0;
-    for (int b = 0; b < nbins; b++) total += hist_nthr[b];
-    if (total != nelements) {
-        fprintf(stderr,
-                "  VERIFY FAIL stage3: sum=%lld expected=%lld\n",
-                total, nelements);
-        return 0;
-    }
-
-    return 1;
-}*/
-
 int main(int argc, char* argv[]){
     if(argc < 6 || argc > 7){
         printf("usage: %s <nelements> <npivots> <nbins> <nthreads> <nr> [-Verify]\n", argv[0]);
@@ -781,10 +852,12 @@ int main(int argc, char* argv[]){
     }
 
     int num_proc;
+    int rank;
 
     MPI_Status stat;
-    MPI_Init(argc, &argv);
+    MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_proc);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     nelements = atoll(argv[1]);
     npivots = atoi(argv[2]);
@@ -799,6 +872,8 @@ int main(int argc, char* argv[]){
     }
 
     srand(2025 * 100 + 1); // +1 mas tem que deixar +i
+
+    long long nelements_local = nelements / num_proc;
 
     /* Init eviction buffer */
     evictCacheInit();
@@ -819,9 +894,9 @@ int main(int argc, char* argv[]){
     int    *ok_arr = (int *)   malloc(nr * sizeof(int));
     // int all_ok = 1;
 
-    chronometer_t bl_chronometer;
-    chronometer_t sthr_chronometer;
-    chronometer_t nthr_chronometer;
+   chronometer_t bl_chronometer;
+   chronometer_t sthr_chronometer;
+   chronometer_t nthr_chronometer;
 
     /* Print round table header */
     printf("  Round ;  T(bl_ser) s ;  T(1 thr) s ;   T(N thr) s ;    Speedup ; OK?\n");
@@ -829,10 +904,16 @@ int main(int argc, char* argv[]){
 
     for(int r = 0; r < nr; r++){
         /* Generate data */
-        long long *data = (long long *)malloc(sizeof(long long) * nelements);
+        long long *data = (long long *)malloc(sizeof(long long) * nelements * 2);
         if (!data) { fprintf(stderr, "malloc failed\n"); return 1; }
 
-        gen_test_data_balanced2(data, nelements, nbins);
+        // gen_test_data_balanced2(data, nelements_local, nbins);
+        for (long long i = 0; i < nelements_local; i++)
+            data[i] = rand64();
+
+        // printf("data processo:%i\n[ ", rank);
+        // for(int i = 0; i < nelements_local; i++) printf("%lld ", data[i]);
+        // printf("]\n");
 
         long long *pivots = (long long *)malloc(sizeof(long long) * npivots);
         long long *limits = (long long *)malloc(sizeof(long long) * (nbins + 1));
@@ -845,13 +926,16 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
-        chrono_reset(&bl_chronometer);
-        chrono_reset(&sthr_chronometer);
-        chrono_reset(&nthr_chronometer);
-
+       chrono_reset(&bl_chronometer);
+       chrono_reset(&sthr_chronometer);
+       chrono_reset(&nthr_chronometer);
+        
         chrono_start(&bl_chronometer);
-        build_limits_sp2_serial(data, nelements, npivots, nbins, pivots, limits);
+        build_limits_mpi(data, nelements, npivots, nbins, limits, MPI_COMM_WORLD);
         chrono_stop(&bl_chronometer);
+        // printf("limites processo:%i\n[ ", rank);
+        // for(int i = 0; i < nbins + 1; i++) printf("%lld ", limits[i]);
+        // printf("]\n");
 
         /* Print 8 bins
         if (r == 0) {
@@ -887,8 +971,12 @@ int main(int argc, char* argv[]){
 
         /* Histograma 1-thread */
         chrono_start(&sthr_chronometer);
-        parallel_multiPartition(data, Output_1, nelements, limits, nbins, Pos, 1);
+        parallel_multiPartition(data, Output_1, nelements_local, limits, nbins, Pos, 1);
         chrono_stop(&sthr_chronometer);
+
+        // printf("output processo:%i\n[ ", rank);
+        // for(int i = 0; i < nelements_local; i++) printf("%lld ", Output_1[i]);
+        // printf("]\n");
 
         // rode com:
         // ./parallel_multiPartition 14 10 4 4 1
@@ -904,24 +992,30 @@ int main(int argc, char* argv[]){
             printf("%lld ", Pos[i]);
         printf("]\n");*/
 
+        long long * saida_final = (long long*)malloc(sizeof(long long) * nelements * 2);
+        int quantidade_de_elementos = 0;
         /*========================*/
-        //multi_partition_mpi
+        chrono_start(&nthr_chronometer);
+        saida_final = multi_partition_mpi(Output_1, Pos, nelements_local, nbins, &quantidade_de_elementos, MPI_COMM_WORLD);
+        chrono_stop(&nthr_chronometer);
         /*========================*/
+
+        // printf("saida final processo: %i[ ", rank);
+        // for(int i = 0; i < quantidade_de_elementos; i++) printf("%lld ", saida_final[i]);
+        // printf("]\n");
 
         /* Limpar cache antes de exec de N-thread */
         evictCache();
 
         /* Histograma N-thread*/
-        chrono_start(&nthr_chronometer);
-        parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
-        chrono_stop(&nthr_chronometer);
-
+        //parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
+        /*
         local_partition_verify_ok = 1;
         if (use_verify) {
             verifica_particoesLocais(data, Output_n, nelements, limits, nbins, Pos, nthreads);
         }
         ok_arr[r] = local_partition_verify_ok;
-
+*/
         /* saida dos testes */
 /*        printf("Output: [");
         for(int i = 0; i < nelements; i++)
@@ -949,8 +1043,8 @@ int main(int argc, char* argv[]){
         spdup[r] = t_1thr[r] / t_nthr[r];
 
         printf("  %-5d ;  %12.6f ;  %12.6f ;  %12.6f ;  %9.3f ; %s\n",
-               r + 1, t_bl[r], t_1thr[r], t_nthr[r], spdup[r],
-               ok_arr[r] ? "OK" : "FAIL");
+              r + 1, t_bl[r], t_1thr[r], t_nthr[r], spdup[r],
+              ok_arr[r] ? "OK" : "FAIL");
 
         free(data);
         free(pivots);
