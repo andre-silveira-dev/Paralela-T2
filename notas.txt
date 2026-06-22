@@ -22,3 +22,7 @@
  - [ ] Construir planilha
  - [ ] Escrever relatório
  - [ ] Entrar de férias por que o homem está cansado
+
+# Dúvidas para wagner
+- Qual dos processos MPI devem ser usados de referencia para extrair
+  os números de temporização?

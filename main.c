@@ -5,7 +5,7 @@
 #include <limits.h>
 #include <time.h>
 
-//#include "chrono.c"
+#include "chrono.c"
 
 #define MAX_THREADS 8
 #define CACHE_SIZE_MB 3
@@ -857,28 +857,31 @@ int main(int argc, char* argv[]){
     evictCacheInit();
 
     /* Print header */
-    printf("\n=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===\n");
-    printf("  Elements : %lld  |  Pivots : %lld  |  Bins : %lld  |  Threads : %lld  |  Rounds : %lld  |  Verify : %s\n",
-           nelements, npivots, nbins, nthreads, nr,
-           use_verify ? "Able" : "Disable");
-    printf("  LLC size : %d MiB  |  Eviction buffer : %d MiB\n\n",
-           CACHE_SIZE_MB, CACHE_SIZE_MB * EVICTION_MULTIPLIER);
+    if(rank == 0) {
+        printf("\n=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===\n");
+        printf("  Elements : %lld  |  Pivots : %lld  |  Bins : %lld  |  Threads : %lld  |  Process's : %i  |  Rounds : %lld  |  Verify : %s  |  Tb2: %s\n",
+            nelements, npivots, nbins, nthreads, num_proc, nr,
+            use_verify ? "Able" : "Disable",
+            use_tb2 ? "Able" : "Disable");
+        printf("  LLC size : %d MiB  |  Eviction buffer : %d MiB\n\n",
+            CACHE_SIZE_MB, CACHE_SIZE_MB * EVICTION_MULTIPLIER);
+    }
 
     /* Arrays for per-round times */
-    double *t_bl   = (double *)malloc(nr * sizeof(double));
-    double *t_1thr = (double *)malloc(nr * sizeof(double));
-    double *t_nthr = (double *)malloc(nr * sizeof(double));
+    double *t_1thr1proc = (double *)malloc(nr * sizeof(double));
+    double *t_NthrNPproc = (double *)malloc(nr * sizeof(double));
     double *spdup  = (double *)malloc(nr * sizeof(double));
     int    *ok_arr = (int *)   malloc(nr * sizeof(int));
-    // int all_ok = 1;
+    int all_ok = 1;
 
-   chronometer_t bl_chronometer;
-   chronometer_t sthr_chronometer;
-   chronometer_t nthr_chronometer;
+   chronometer_t sproc_chronometer;
+   chronometer_t mproc_chronometer;
 
     /* Print round table header */
-    printf("  Round ;  T(bl_ser) s ;  T(1 thr) s ;   T(N thr) s ;    Speedup ; OK?\n");
-    printf("  ----- ;------------ ;------------ ;------------ ;------------ ;---------- ; ----\n");
+    if(rank == 0) {
+        printf("  Round  ;  T(part-ser) s  ;  T(np:%i x nth:%i) s  ;  Speedup  ;  OK?\n", num_proc, nthreads);
+        printf(" ------- ; --------------- ; --------------------- ; --------- ; ----\n");
+    }
 
     for(int r = 0; r < nr; r++){
         /* Generate data */
@@ -902,46 +905,22 @@ int main(int argc, char* argv[]){
         long long *Output_1 = (long long *)calloc(nelements, sizeof(long long));
         long long *Output_n = (long long *)calloc(nelements, sizeof(long long));
         long long *Pos      = (long long *)malloc(sizeof(long long) * nbins);
+        long long * final_output = (long long*)malloc(sizeof(long long) * nelements);
+        int quantidade_de_elementos = 0;
 
-        if (!pivots || !limits || !Output_1 || !Output_n || !Pos) {
+        if (!pivots || !limits || !Output_1 || !Output_n || !Pos || !saida_final) {
             fprintf(stderr, "Memory allocation failed\n");
             return 1;
         }
 
-       chrono_reset(&bl_chronometer);
-       chrono_reset(&sthr_chronometer);
-       chrono_reset(&nthr_chronometer);
+        chrono_reset(&proc_chronometer);
+        chrono_reset(&mproc_chronometer);
         
-        chrono_start(&bl_chronometer);
         build_limits_mpi(data, nelements, npivots, nbins, limits, MPI_COMM_WORLD);
-        chrono_stop(&bl_chronometer);
+        
         // printf("limites processo:%i\n[ ", rank);
         // for(int i = 0; i < nbins + 1; i++) printf("%lld ", limits[i]);
         // printf("]\n");
-
-        /* Print 8 bins
-        if (r == 0) {
-            int show = nbins < 8 ? nbins : 8;
-            printf("\n  --- Round 1: first %d partitions ---\n", show);
-            printf("   Bin  ;          Lo (inclusive)  ;          Hi (exclusive)  ;         Count\n");
-
-            long long *tmp_hist = (long long *)calloc(nbins, sizeof(long long));
-            for (long long i = 0; i < nelements; i++) {
-                int bin = findBin(limits, nbins, data[i]);
-                tmp_hist[bin]++;
-            }
-            for (int b = 0; b < show; b++) {
-                const char *hi_label = (b == nbins - 1) ? "" : "";
-                printf("   %3d  ;  %22lld  ;  %22lld  ;  %12lld\n",
-                       b, limits[b], limits[b + 1], tmp_hist[b]);
-            }
-            if (nbins > 8)
-                printf("  ... (%lld more bins not shown)\n", nbins - 8);
-            free(tmp_hist);
-            printf("\n");
-            printf("  Round ;  T(bl_ser) s ;  T(1 thr) s ;   T(N thr) s ;    Speedup ; OK?\n");
-            printf("  ----- ;------------ ;------------ ;------------ ;------------ ;---------- ; ----\n");
-        }*/
 
         /* Limpar cache antes de exec de 1-thread */
         evictCache();
@@ -951,36 +930,17 @@ int main(int argc, char* argv[]){
         //long long Limits_teste[5] = {LLONG_MIN, 12, 70, 90, LLONG_MAX};
         //nbins = 4;
 
-        /* Histograma 1-thread */
-        chrono_start(&sthr_chronometer);
+        /* Partition 1-Process 1-Thread */
+        chrono_start(&sproc_chronometer);
         parallel_multiPartition(data, Output_1, nelements_local, limits, nbins, Pos, 1);
-        chrono_stop(&sthr_chronometer);
 
         // printf("output processo:%i\n[ ", rank);
         // for(int i = 0; i < nelements_local; i++) printf("%lld ", Output_1[i]);
         // printf("]\n");
-
-        // rode com:
-        // ./parallel_multiPartition 14 10 4 4 1
-
-        /* saida dos testes *//*
-        printf("Output: [");
-        for(int i = 0; i < nelements; i++)
-            printf("%lld ", Output_1[i]);
-        printf("]\n");
-
-        printf("Pos: [");
-        for(int i = 0; i < nbins; i++)
-            printf("%lld ", Pos[i]);
-        printf("]\n");*/
-
-        long long * saida_final = (long long*)malloc(sizeof(long long) * nelements * 2);
-        int quantidade_de_elementos = 0;
-        /*========================*/
-        chrono_start(&nthr_chronometer);
-        saida_final = multi_partition_mpi(Output_1, Pos, nelements_local, nbins, &quantidade_de_elementos, MPI_COMM_WORLD);
-        chrono_stop(&nthr_chronometer);
-        /*========================*/
+        
+        final_output = multi_partition_mpi(Output_1, Pos, nelements_local, nbins, &quantidade_de_elementos, MPI_COMM_WORLD);        
+        chrono_stop(&sproc_chronometer);
+        /* ============================ */
 
         // printf("saida final processo: %i[ ", rank);
         // for(int i = 0; i < quantidade_de_elementos; i++) printf("%lld ", saida_final[i]);
@@ -988,6 +948,17 @@ int main(int argc, char* argv[]){
 
         /* Limpar cache antes de exec de N-thread */
         evictCache();
+
+        /* Partition NP-Process N-Thread */
+        chrono_start(&mproc_chronometer);
+        parallel_multiPartition(data, Output_n, nelements_local, limits, nbins, Pos, 1);
+
+        // printf("output processo:%i\n[ ", rank);
+        // for(int i = 0; i < nelements_local; i++) printf("%lld ", Output_1[i]);
+        // printf("]\n");
+
+        final_output = multi_partition_mpi(Output_n, Pos, nelements_local, nbins, &quantidade_de_elementos, MPI_COMM_WORLD);        
+        chrono_stop(&mproc_chronometer);
 
         /* Histograma N-thread*/
         //parallel_multiPartition(data, Output_n, nelements, limits, nbins, Pos, nthreads);
