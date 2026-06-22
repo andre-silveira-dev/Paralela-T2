@@ -472,29 +472,6 @@ static inline int findBin(const long long *limits, int nbins, long long value) {
     return lo;
 }
 
-/*
-static inline int findBin(const long long *limits,
-                          int nbins,
-                          long long value)
-{
-    int lo = 0;
-    int hi = nbins;
-
-    while (lo < hi) {
-        int mid = lo + (hi - lo) / 2;
-
-        if (value < limits[mid])
-            hi = mid;
-        else
-            lo = mid + 1;
-    }
-
-    if (lo >= nbins)
-        return nbins - 1;
-
-    return lo;
-} */
-
 void *histogram(void *ptr){
     int tid = *(int *)ptr;
 
@@ -847,7 +824,7 @@ int validateInputs(){
 
 int main(int argc, char* argv[]){
     if(argc < 6 || argc > 7){
-        printf("usage: %s <nelements> <npivots> <nbins> <nthreads> <nr> [-Verify]\n", argv[0]);
+        printf("usage: %s <nelements> <npivots> <nbins> <nthreads> <nr> [-Verify] [-tb2] \n", argv[0]);
         return 0;
     }
 
@@ -866,6 +843,7 @@ int main(int argc, char* argv[]){
     nr = atoi(argv[5]);
 
     use_verify = (argc == 7 && strcmp(argv[6], "-Verify") == 0);
+    use_tb2 = (argc == 7 && strcmp(argv[6], "-tb2") == 0) || (argc == 8 && strcmp(argv[8], "-tb2") == 0);
     
     if(validateInputs()){
         return 0;
@@ -907,9 +885,13 @@ int main(int argc, char* argv[]){
         long long *data = (long long *)malloc(sizeof(long long) * nelements * 2);
         if (!data) { fprintf(stderr, "malloc failed\n"); return 1; }
 
-        // gen_test_data_balanced2(data, nelements_local, nbins);
-        for (long long i = 0; i < nelements_local; i++)
-            data[i] = rand64();
+        if (use_tb2) {
+            gen_test_data_balanced2(data, nelements_local, nbins);
+        } else {
+            for (long long i = 0; i < nelements_local; i++) {
+                data[i] = rand64();
+            }
+        }
 
         // printf("data processo:%i\n[ ", rank);
         // for(int i = 0; i < nelements_local; i++) printf("%lld ", data[i]);
