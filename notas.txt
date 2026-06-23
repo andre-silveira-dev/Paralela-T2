@@ -26,4 +26,11 @@
 - Como deveria ser a implementação da função de verificação?
   por que tem um parâmetro paralelo na assinatura?
 
+- Pode deixar somente o rank 0 imprimindo dados?
 
+- Quais dados terão que ter nos gráficos do relatório?
+    - Speed-up médio
+    - ...
+    obs: da última vez que perguntei algo semelhante ele disse que era
+    arbitrário, mas na última cobrança ele disse que não era kkkk
+    tomar cuidado e tentar fazer ele ser bem explicito
