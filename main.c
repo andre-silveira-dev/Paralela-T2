@@ -33,8 +33,8 @@ long long *multi_partition_mpi(
     long long nElements,
     int nbins,
     int *nElementsReceived,
-    MPI_Comm comm)
-{
+    MPI_Comm comm
+) {
     int rank;
     int nproc;
 
@@ -234,10 +234,11 @@ static inline long long rand64(void) {
 }
 
 
-static void gen_test_data_balanced2(long long *data,
-                                     long long nelements,
-                                     int nbins)
-{
+static void gen_test_data_balanced2(
+    long long *data,
+    long long nelements,
+    int nbins
+) {
     if (nelements <= 0 || nbins <= 0) return;
 
     for (long long i = 0; i < nelements; i++)
@@ -341,8 +342,8 @@ void build_limits_mpi(
     int npivots,
     int nbins,
     long long *limits,
-    MPI_Comm comm)
-{
+    MPI_Comm comm
+) {
     int rank;
     int nproc;
 
@@ -934,7 +935,7 @@ int main(int argc, char* argv[]){
 
         /* Partition 1-Process 1-Thread */
         long long * Input_all = NULL;
-        if(rank == 0){
+        if(rank == 0) {
             Input_all = malloc(sizeof(long long) * nelements);
         }
 
@@ -953,8 +954,7 @@ int main(int argc, char* argv[]){
 
         long long *Output_serial = NULL;
         long long *Pos_serial    = NULL;
-        if(rank == 0)
-        {
+        if(rank == 0) {
             Output_serial = calloc(nelements, sizeof(long long));
             Pos_serial    = calloc(nbins, sizeof(long long));
 
@@ -1005,15 +1005,16 @@ int main(int argc, char* argv[]){
             verifica_particoesLocais(data, Output_1, nelements_local, limits, nbins, Pos, nthreads);
         }
         ok_arr[r] = local_partition_verify_ok;
-        if(!ok_arr[r]) all_ok = 0;
-
+        if(!ok_arr[r]) {
+            all_ok = 0;
+        }
 
         t_1thr1proc[r] = (double) chrono_gettotal(&sproc_chronometer) / (double)1e9;
         t_NthrNPproc[r] = (double) chrono_gettotal(&mproc_chronometer) / (double)1e9;
 
         spdup[r] = t_1thr1proc[r] / t_NthrNPproc[r];
 
-        if(rank == 0){
+        if(rank == 0) {
             printf("  %-5d  ;   %12.6f  ;         %12.6f  ;%9.3f  ;  %s\n",
                   r + 1, t_1thr1proc[r], t_NthrNPproc[r], spdup[r],
                   ok_arr[r] ? "OK" : "FAIL");
@@ -1039,7 +1040,7 @@ int main(int argc, char* argv[]){
     avg_mproc  /= nr;
     avg_sp /= nr;
 
-    if(rank == 0){
+    if(rank == 0) {
         printf(" ------- ; --------------- ; --------------------- ; --------- ; ----\n");
         printf("   AVG   ;  %12.6f   ;         %12.6f  ;%9.3f  ;  %s\n\n",
                avg_sproc, avg_mproc, avg_sp, all_ok ? "OK" : "FAIL");
