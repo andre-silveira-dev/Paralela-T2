@@ -7,18 +7,30 @@
 
  - nota: formatação o mais parecido com a do trabalho 1 possivel
 
-14/06 (Andreus) =======================
- - Como deveria ser a implementação da função de verificação?
-   por que tem um parâmetro paralelo na assinatura?
-
 22/06 (André) =======================
  - Validar se tempo está sendo cronometrado corretamente
 
  - [X] Incluir função de validação no código
- - [?] Comunicação MPI (geração de dados e output final)
- - [ ] Validar variáveis de temporização
- - [ ] Arrumar saída para imprimir tudo que precisa ser impresso
+ - [X] Comunicação MPI (geração de dados e output final)
+ - [X] Validar variáveis de temporização
+ - [X] Arrumar saída para imprimir tudo que precisa ser impresso
  - [ ] Realizar testes
  - [ ] Construir planilha
  - [ ] Escrever relatório
  - [ ] Entrar de férias por que o homem está cansado
+
+# Dúvidas para wagner
+- Qual dos processos MPI devem ser usados de referencia para extrair
+  os números de temporização?
+
+- Como deveria ser a implementação da função de verificação?
+  por que tem um parâmetro paralelo na assinatura?
+
+- Pode deixar somente o rank 0 imprimindo dados?
+
+- Quais dados terão que ter nos gráficos do relatório?
+    - Speed-up médio
+    - ...
+    obs: da última vez que perguntei algo semelhante ele disse que era
+    arbitrário, mas na última cobrança ele disse que não era kkkk
+    tomar cuidado e tentar fazer ele ser bem explicito
