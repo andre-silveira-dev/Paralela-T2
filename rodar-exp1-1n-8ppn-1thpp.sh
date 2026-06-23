@@ -3,9 +3,10 @@
 echo "rodando no host $(hostname)"
 echo "rodando no host $(hostname)" > saida-slurm-exp1-1n-8ppn-1thpp.txt
 
-echo "SLURM_JOB_NAME: $SLURM_JOB_NAME" | tee -a saida-slurm-exp1-1thpp.txt
-echo "SLURM_NODELIST: $SLURM_NODELIST" | tee -a saida-slurm-exp1-1thpp.txt
-echo "SLURM_JOB_CPUS_PER_NODE: $SLURM_JOB_CPUS_PER_NODE" | tee -a saida-slurm-exp1-1thpp.txt
+echo "SLURM_JOB_NAME: $SLURM_JOB_NAME" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
+echo "SLURM_NODELIST: $SLURM_NODELIST" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
+echo "SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
+echo "SLURM_JOB_CPUS_PER_NODE: $SLURM_JOB_CPUS_PER_NODE" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
 
 echo "==========================================" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
 echo "Experiencia 1" | tee -a saida-slurm-exp1-1n-8ppn-1thpp.txt
