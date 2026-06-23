@@ -23,10 +23,17 @@
 - Qual dos processos MPI devem ser usados de referencia para extrair
   os números de temporização?
 
+  R: Rank 0 mesmo
+
 - Como deveria ser a implementação da função de verificação?
   por que tem um parâmetro paralelo na assinatura?
+  
+  R: A funcao de verificacao tem que checar se a ordem dos 
+  elementos esta correta e se eles estao agrupados por bin
 
 - Pode deixar somente o rank 0 imprimindo dados?
+  
+  R: Soh o rank 0 imprime mesmo
 
 - Quais dados terão que ter nos gráficos do relatório?
     - Speed-up médio
@@ -34,3 +41,5 @@
     obs: da última vez que perguntei algo semelhante ele disse que era
     arbitrário, mas na última cobrança ele disse que não era kkkk
     tomar cuidado e tentar fazer ele ser bem explicito
+
+  R: Nao precisa de grafico no relatorio, soh tabela
