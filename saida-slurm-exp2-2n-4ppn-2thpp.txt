@@ -1,0 +1,43 @@
+rodando no host wz10
+SLURM_JOB_NAME: rodar-exp2-2n-4ppn-2thpp.sh
+SLURM_NODELIST: wz[10-11]
+SLURM_JOB_NODELIST: wz[10-11]
+SLURM_JOB_CPUS_PER_NODE: 8(x2)
+==========================================
+Experiencia 2
+np=4  nth=2
+nelements=32000000
+npivots=32000
+nbins=512
+nr=10
+==========================================
+
+=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===
+  Elements : 32000000  |  Pivots : 32000  |  Bins : 512  |  Threads : 2  |  Process's : 4  |  Rounds : 10  |  Verify : Disable  |  Tb2: Disable
+  LLC size : 3 MiB  |  Eviction buffer : 9 MiB
+
+  Round  ;  T(part-ser) s  ;  T(np:4 x nth:2) s    ;  Speedup  ;  OK?
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+  1      ;       4.929337  ;             1.841757  ;    2.676  ;  OK
+  2      ;       4.921392  ;             1.870529  ;    2.631  ;  OK
+  3      ;       4.952837  ;             1.821795  ;    2.719  ;  OK
+  4      ;       4.945004  ;             1.680624  ;    2.942  ;  OK
+  5      ;       4.949997  ;             1.865228  ;    2.654  ;  OK
+  6      ;       4.955174  ;             1.910241  ;    2.594  ;  OK
+  7      ;       4.965554  ;             1.878291  ;    2.644  ;  OK
+  8      ;       4.967814  ;             1.620327  ;    3.066  ;  OK
+  9      ;       4.937759  ;             1.985143  ;    2.487  ;  OK
+  10     ;       4.933924  ;             1.622279  ;    3.041  ;  OK
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+   AVG   ;      4.945879   ;             1.809621  ;    2.745  ;  OK
+
+ ============================== Summary =============================
+  Avg time  (1 process 1 thread )     : 4.945879 ; s   ; 6.47 ; MEPS
+  Avg time  (4 process 2 threads)     : 1.809621 ; s   ; 17.68 ; MEPS
+  Avg Partition problem speedup               : 2.745x
+
+  Overall correctness                 : PASS
+
+Tempo total da shell: 90 segundos
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+             18603     debug rodar-ex   nobody  R       1:30      2 wz[10-11]

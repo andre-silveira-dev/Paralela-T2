@@ -1,0 +1,43 @@
+rodando no host wz10
+SLURM_JOB_NAME: rodar-exp3-4n-2ppn-4thpp.sh
+SLURM_NODELIST: wz[10-12,15]
+SLURM_JOB_NODELIST: wz[10-12,15]
+SLURM_JOB_CPUS_PER_NODE: 8(x4)
+==========================================
+Experiencia 3
+np=2  nth=4
+nelements=32000000
+npivots=32000
+nbins=512
+nr=10
+==========================================
+
+=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===
+  Elements : 32000000  |  Pivots : 32000  |  Bins : 512  |  Threads : 4  |  Process's : 2  |  Rounds : 10  |  Verify : Disable  |  Tb2: Disable
+  LLC size : 3 MiB  |  Eviction buffer : 9 MiB
+
+  Round  ;  T(part-ser) s  ;  T(np:2 x nth:4) s    ;  Speedup  ;  OK?
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+  1      ;       5.281846  ;             3.836307  ;    1.377  ;  OK
+  2      ;       5.306363  ;             3.965118  ;    1.338  ;  OK
+  3      ;       5.299528  ;             4.380698  ;    1.210  ;  OK
+  4      ;       5.286485  ;             4.417244  ;    1.197  ;  OK
+  5      ;       5.303147  ;             3.825645  ;    1.386  ;  OK
+  6      ;       5.324083  ;             4.241464  ;    1.255  ;  OK
+  7      ;       5.304132  ;             4.273622  ;    1.241  ;  OK
+  8      ;       5.324737  ;             3.917603  ;    1.359  ;  OK
+  9      ;       5.328098  ;             3.958514  ;    1.346  ;  OK
+  10     ;       5.301326  ;             4.249114  ;    1.248  ;  OK
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+   AVG   ;      5.305974   ;             4.106533  ;    1.296  ;  OK
+
+ ============================== Summary =============================
+  Avg time  (1 process 1 thread )     : 5.305974 ; s   ; 6.03 ; MEPS
+  Avg time  (2 process 4 threads)     : 4.106533 ; s   ; 7.79 ; MEPS
+  Avg Partition problem speedup               : 1.296x
+
+  Overall correctness                 : PASS
+
+Tempo total da shell: 134 segundos
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+             18604     debug rodar-ex   nobody  R       2:14      4 wz[10-12,15]
