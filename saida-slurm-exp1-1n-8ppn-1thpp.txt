@@ -1,0 +1,43 @@
+rodando no host wz10
+SLURM_JOB_NAME: rodar-exp1-1n-8ppn-1thpp.sh
+SLURM_NODELIST: wz10
+SLURM_JOB_NODELIST: wz10
+SLURM_JOB_CPUS_PER_NODE: 8
+==========================================
+Experiencia 1
+np=8  nth=1
+nelements=32000000
+npivots=32000
+nbins=512
+nr=10
+==========================================
+
+=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===
+  Elements : 32000000  |  Pivots : 32000  |  Bins : 512  |  Threads : 1  |  Process's : 8  |  Rounds : 10  |  Verify : Disable  |  Tb2: Disable
+  LLC size : 3 MiB  |  Eviction buffer : 9 MiB
+
+  Round  ;  T(part-ser) s  ;  T(np:8 x nth:1) s    ;  Speedup  ;  OK?
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+  1      ;       4.459480  ;             2.843478  ;    1.568  ;  OK
+  2      ;       4.448098  ;             1.996539  ;    2.228  ;  OK
+  3      ;       4.502933  ;             2.904018  ;    1.551  ;  OK
+  4      ;       4.501705  ;             2.885852  ;    1.560  ;  OK
+  5      ;       4.357958  ;             2.083299  ;    2.092  ;  OK
+  6      ;       4.507427  ;             2.934782  ;    1.536  ;  OK
+  7      ;       4.391006  ;             2.797150  ;    1.570  ;  OK
+  8      ;       4.601259  ;             2.831745  ;    1.625  ;  OK
+  9      ;       4.634654  ;             2.915657  ;    1.590  ;  OK
+  10     ;       4.427553  ;             2.895911  ;    1.529  ;  OK
+ ------- ; --------------- ; --------------------- ; --------- ; ----
+   AVG   ;      4.483207   ;             2.708843  ;    1.685  ;  OK
+
+ ============================== Summary =============================
+  Avg time  (1 process 1 thread )     : 4.483207 ; s   ; 7.14 ; MEPS
+  Avg time  (8 process 1 threads)     : 2.708843 ; s   ; 11.81 ; MEPS
+  Avg Partition problem speedup               : 1.685x
+
+  Overall correctness                 : PASS
+
+Tempo total da shell: 86 segundos
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+             18602     debug rodar-ex   nobody  R       1:26      1 wz10
