@@ -18,26 +18,26 @@ nr=10
 
   Round  ;  T(part-ser) s  ;  T(np:8 x nth:1) s    ;  Speedup  ;  OK?
  ------- ; --------------- ; --------------------- ; --------- ; ----
-  1      ;       4.459480  ;             2.843478  ;    1.568  ;  OK
-  2      ;       4.448098  ;             1.996539  ;    2.228  ;  OK
-  3      ;       4.502933  ;             2.904018  ;    1.551  ;  OK
-  4      ;       4.501705  ;             2.885852  ;    1.560  ;  OK
-  5      ;       4.357958  ;             2.083299  ;    2.092  ;  OK
-  6      ;       4.507427  ;             2.934782  ;    1.536  ;  OK
-  7      ;       4.391006  ;             2.797150  ;    1.570  ;  OK
-  8      ;       4.601259  ;             2.831745  ;    1.625  ;  OK
-  9      ;       4.634654  ;             2.915657  ;    1.590  ;  OK
-  10     ;       4.427553  ;             2.895911  ;    1.529  ;  OK
+  1      ;       4.738281  ;             2.943244  ;    1.610  ;  OK
+  2      ;       4.738600  ;             2.247418  ;    2.108  ;  OK
+  3      ;       4.729938  ;             2.923296  ;    1.618  ;  OK
+  4      ;       4.721363  ;             2.894566  ;    1.631  ;  OK
+  5      ;       4.745061  ;             2.866884  ;    1.655  ;  OK
+  6      ;       4.731682  ;             2.881523  ;    1.642  ;  OK
+  7      ;       4.750497  ;             2.912354  ;    1.631  ;  OK
+  8      ;       4.744340  ;             2.851266  ;    1.664  ;  OK
+  9      ;       4.782170  ;             2.841598  ;    1.683  ;  OK
+  10     ;       4.729037  ;             2.908601  ;    1.626  ;  OK
  ------- ; --------------- ; --------------------- ; --------- ; ----
-   AVG   ;      4.483207   ;             2.708843  ;    1.685  ;  OK
+   AVG   ;      4.741097   ;             2.827075  ;    1.687  ;  OK
 
  ============================== Summary =============================
-  Avg time  (1 process 1 thread )     : 4.483207 ; s   ; 7.14 ; MEPS
-  Avg time  (8 process 1 threads)     : 2.708843 ; s   ; 11.81 ; MEPS
-  Avg Partition problem speedup               : 1.685x
+  Avg time  (1 process 1 thread )     : 4.741097 ; s   ; 6.75 ; MEPS
+  Avg time  (8 process 1 threads)     : 2.827075 ; s   ; 11.32 ; MEPS
+  Avg Partition problem speedup               : 1.687x
 
   Overall correctness                 : PASS
 
-Tempo total da shell: 86 segundos
+Tempo total da shell: 89 segundos
              JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-             18602     debug rodar-ex   nobody  R       1:26      1 wz10
+             18708     debug rodar-ex   nobody  R       1:29      1 wz10

@@ -708,15 +708,6 @@ void verifica_particoesGlobais(
     long long        *Pos,         /* output histogram, size nbins         */
     int               nthreads     /* number of threads (1 = serial path)  */
 ){
-    verifica_particoesLocais(
-        Input,
-        Output,
-        nElements,
-        Limits,
-        nbins,
-        Pos,
-        nthreads
-    );
 }
 
 int validateInputs(){
