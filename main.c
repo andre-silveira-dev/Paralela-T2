@@ -1,3 +1,12 @@
+/** 
+ * Trabalho 2 - Programação Paralela
+ * Multipartição paralela usando MPI
+ * 
+ * Discentes:
+ *   Andreus Gustavo Schultz - GRR20232374
+ *   André Gustavo Silvera - GRR20232345
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
