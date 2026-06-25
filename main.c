@@ -13,162 +13,6 @@
 
 #include <mpi.h>
 
-static long long bin_size(
-    int bin,
-    const long long *Pos,
-    long long nElements,
-    int nbins)
-{
-    if (bin == nbins - 1)
-        return nElements - Pos[bin];
-
-    return Pos[bin + 1] - Pos[bin];
-}
-
-long long *multi_partition_mpi(
-    const long long *Output,
-    const long long *Pos,
-    long long nElements,
-    int nbins,
-    int *nElementsReceived,
-    MPI_Comm comm
-) {
-    int rank;
-    int nproc;
-
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &nproc);
-
-    int bins_per_rank = nbins / nproc;
-
-    /*
-     * ============================================================
-     * Monta sendcounts
-     * ============================================================
-     */
-
-    int *sendcounts = calloc(nproc, sizeof(int));
-
-    for (int bin = 0; bin < nbins; bin++) {
-        int dest = bin / bins_per_rank;
-
-        long long size = bin_size(bin, Pos, nElements, nbins);
-
-        sendcounts[dest] += (int)size;
-    }
-
-    /*
-     * ============================================================
-     * Monta sdispls
-     * ============================================================
-     */
-
-    int *sdispls = calloc(nproc, sizeof(int));
-
-    for (int i = 1; i < nproc; i++) {
-        sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
-    }
-
-    /*
-     * ============================================================
-     * Monta sendbuf
-     * ============================================================
-     */
-
-    long long *sendbuf = malloc(nElements * sizeof(long long));
-
-    int *cursor = calloc(nproc, sizeof(int));
-
-    for (int i = 0; i < nproc; i++) {
-        cursor[i] = sdispls[i];
-    }
-    
-    for (int bin = 0; bin < nbins; bin++) {
-        int dest = bin / bins_per_rank;
-
-        long long begin = Pos[bin];
-
-        long long size = bin_size(bin, Pos, nElements, nbins);
-
-        memcpy(
-            &sendbuf[cursor[dest]],
-            &Output[begin],
-            size * sizeof(long long)
-        );
-
-        cursor[dest] += size;
-    }
-
-    free(cursor);
-
-    /*
-     * ============================================================
-     * Descobre quanto vai receber
-     * ============================================================
-     */
-
-    int *recvcounts = calloc(nproc, sizeof(int));
-
-    MPI_Alltoall(
-        sendcounts,
-        1,
-        MPI_INT,
-        recvcounts,
-        1,
-        MPI_INT,
-        comm
-    );
-
-    int *recvdispls = calloc(nproc, sizeof(int));
-
-    for (int i = 1; i < nproc; i++) {
-        recvdispls[i] = recvdispls[i - 1] + recvcounts[i - 1];
-    }
-
-    int total_recv = 0;
-
-    for (int i = 0; i < nproc; i++)
-        total_recv += recvcounts[i];
-
-    long long *recvbuf = malloc((size_t)total_recv * sizeof(long long));
-
-    /*
-     * ============================================================
-     * Redistribui
-     * ============================================================
-     */
-
-    MPI_Alltoallv(
-        sendbuf,
-        sendcounts,
-        sdispls,
-        MPI_LONG_LONG,
-        recvbuf,
-        recvcounts,
-        recvdispls,
-        MPI_LONG_LONG,
-        comm
-    );
-
-    /*
-     * ============================================================
-     * Limpeza
-     * ============================================================
-     */
-
-    free(sendbuf);
-    free(sendcounts);
-    free(sdispls);
-    free(recvcounts);
-    free(recvdispls);
-
-    *nElementsReceived = total_recv;
-
-    return recvbuf;
-}
-
-/*=============================================*/
-
 // variaveis de entrada
 long long int nelements = 0, 
     npivots = 0, 
@@ -203,6 +47,123 @@ static int parallelHisto_nbins = 0;
 static int parallelHisto_active_threads = 1;
 static int local_partition_verify_ok = 1;
 
+static long long bin_size(
+    int bin,
+    const long long *Pos,
+    long long nElements,
+    int nbins)
+{
+    if (bin == nbins - 1)
+        return nElements - Pos[bin];
+
+    return Pos[bin + 1] - Pos[bin];
+}
+
+long long *multi_partition_mpi(
+    const long long *Output,
+    const long long *Pos,
+    long long nElements,
+    int nbins,
+    int *nElementsReceived,
+    MPI_Comm comm
+) {
+    int rank;
+    int nproc;
+
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &nproc);
+
+    int bins_per_rank = nbins / nproc;
+
+    int *sendcounts = calloc(nproc, sizeof(int));
+
+    for (int bin = 0; bin < nbins; bin++) {
+        int dest = bin / bins_per_rank;
+
+        long long size = bin_size(bin, Pos, nElements, nbins);
+
+        sendcounts[dest] += (int)size;
+    }
+
+    int *sdispls = calloc(nproc, sizeof(int));
+
+    for (int i = 1; i < nproc; i++) {
+        sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
+    }
+
+    long long *sendbuf = malloc(nElements * sizeof(long long));
+
+    int *cursor = calloc(nproc, sizeof(int));
+
+    for (int i = 0; i < nproc; i++) {
+        cursor[i] = sdispls[i];
+    }
+    
+    for (int bin = 0; bin < nbins; bin++) {
+        int dest = bin / bins_per_rank;
+
+        long long begin = Pos[bin];
+
+        long long size = bin_size(bin, Pos, nElements, nbins);
+
+        memcpy(
+            &sendbuf[cursor[dest]],
+            &Output[begin],
+            size * sizeof(long long)
+        );
+
+        cursor[dest] += size;
+    }
+
+    free(cursor);
+
+    int *recvcounts = calloc(nproc, sizeof(int));
+
+    MPI_Alltoall(
+        sendcounts,
+        1,
+        MPI_INT,
+        recvcounts,
+        1,
+        MPI_INT,
+        comm
+    );
+
+    int *recvdispls = calloc(nproc, sizeof(int));
+
+    for (int i = 1; i < nproc; i++) {
+        recvdispls[i] = recvdispls[i - 1] + recvcounts[i - 1];
+    }
+
+    int total_recv = 0;
+
+    for (int i = 0; i < nproc; i++)
+        total_recv += recvcounts[i];
+
+    long long *recvbuf = malloc((size_t)total_recv * sizeof(long long));
+
+    MPI_Alltoallv(
+        sendbuf,
+        sendcounts,
+        sdispls,
+        MPI_LONG_LONG,
+        recvbuf,
+        recvcounts,
+        recvdispls,
+        MPI_LONG_LONG,
+        comm
+    );
+
+    free(sendbuf);
+    free(sendcounts);
+    free(sdispls);
+    free(recvcounts);
+    free(recvdispls);
+
+    *nElementsReceived = total_recv;
+
+    return recvbuf;
+}
 
 static inline unsigned long long rand63(void) {
     return (  (unsigned long long)(unsigned)rand()        )
@@ -251,7 +212,6 @@ static void gen_test_data_balanced2(
         data[i] %= nbins;
 }
 
-/* Pre-allocated eviction buffer */
 static volatile char *eviction_buffer = NULL;
 static size_t eviction_size = 0;
 
@@ -327,12 +287,6 @@ void build_limits_mpi(
 
     int npivots_local = npivots / nproc;
 
-    /*
-     * ============================================================
-     * Gera pivôs locais
-     * ============================================================
-     */
-
     long long *pivots_local = malloc(npivots_local * sizeof(long long));
 
     generate_local_pivots(
@@ -341,12 +295,6 @@ void build_limits_mpi(
         npivots_local,
         pivots_local
     );
-
-    /*
-     * ============================================================
-     * Gather dos pivôs
-     * ============================================================
-     */
 
     long long *all_pivots = NULL;
 
@@ -364,12 +312,6 @@ void build_limits_mpi(
         0,
         comm
     );
-
-    /*
-     * ============================================================
-     * Rank 0 gera os limites
-     * ============================================================
-     */
 
     if(rank == 0) {
         qsort(
@@ -399,12 +341,6 @@ void build_limits_mpi(
 
         free(all_pivots);
     }
-
-    /*
-     * ============================================================
-     * Broadcast dos limites
-     * ============================================================
-     */
 
     MPI_Bcast(
         limits,
@@ -598,7 +534,6 @@ int parallel_multiPartition(
     
     prefix_sum(Pos, local_histogram, nbins);
 
-    //caso serial
     if(nthreads <= 1){
         long long *next = (long long*)malloc(sizeof(long long) * nbins);
         if(!next) return 1;
@@ -632,7 +567,6 @@ int parallel_multiPartition(
         return 1;
     }
 
-    // cria matriz de output
     parallelMP_local_output = (long long **)malloc((size_t)nthreads * sizeof(long long *));
     if (!parallelMP_local_output) {
         return 1;
@@ -831,14 +765,12 @@ int main(int argc, char* argv[]){
         return 0;
     }
 
-    srand(2025 * 100 + 1); // +1 mas tem que deixar +i
+    srand(2025*100*rank);
 
     long long nelements_local = nelements / num_proc;
 
-    /* Init eviction buffer */
     evictCacheInit();
 
-    /* Print header */
     if(rank == 0) {
         printf("\n=== Parallel Multi-Partition — Scalability Test (Persistent Thread Pool and MPI Comunication) ===\n");
         printf("  Elements : %lld  |  Pivots : %lld  |  Bins : %lld  |  Threads : %lld  |  Process's : %i  |  Rounds : %lld  |  Verify : %s  |  Tb2: %s\n",
@@ -849,7 +781,6 @@ int main(int argc, char* argv[]){
             CACHE_SIZE_MB, CACHE_SIZE_MB * EVICTION_MULTIPLIER);
     }
 
-    /* Arrays for per-round times */
     double *t_1thr1proc = (double *)malloc(nr * sizeof(double));
     double *t_NthrNPproc = (double *)malloc(nr * sizeof(double));
     double *spdup  = (double *)malloc(nr * sizeof(double));
@@ -859,7 +790,6 @@ int main(int argc, char* argv[]){
     chronometer_t sproc_chronometer;
     chronometer_t mproc_chronometer;
 
-    /* Print round table header */
     if(rank == 0) {
         printf("  Round  ;  T(part-ser) s  ;  T(np:%i x nth:%lld) s    ;  Speedup  ;  OK?\n", num_proc, nthreads);
         printf(" ------- ; --------------- ; --------------------- ; --------- ; ----\n");
@@ -899,25 +829,24 @@ int main(int argc, char* argv[]){
         
         build_limits_mpi(data, nelements, npivots, nbins, limits, MPI_COMM_WORLD);
         
-        /* Limpar cache antes de exec de 1-thread */
+        // Execução 1 thread
         evictCache();
 
-        /* Partition 1-Process 1-Thread */
         long long * Input_all = NULL;
         if(rank == 0) {
             Input_all = malloc(sizeof(long long) * nelements);
         }
 
         MPI_Gather(
-            data,                   // buffer local
-            nelements_local,        // quantidade enviada
-            MPI_LONG_LONG,
-
-            Input_all,              // buffer global (somente rank 0 usa)
+            data,
             nelements_local,
             MPI_LONG_LONG,
 
-            0,                      // root
+            Input_all,
+            nelements_local,
+            MPI_LONG_LONG,
+
+            0,
             MPI_COMM_WORLD
         );
 
@@ -932,11 +861,11 @@ int main(int argc, char* argv[]){
             parallel_multiPartition(
                 Input_all,
                 Output_serial,
-                nelements,      // vetor inteiro
+                nelements,
                 limits,
                 nbins,
                 Pos_serial,
-                1              // uma thread
+                1
             );
 
             chrono_stop(&sproc_chronometer);
@@ -949,16 +878,13 @@ int main(int argc, char* argv[]){
             chrono_start(&sproc_chronometer);
             chrono_stop(&sproc_chronometer);
         }
-        /* ============================ */
-
-        /* Limpar cache antes de exec de N-thread */
+        
+        // Execução paralela nthread
         evictCache();
 
-        /* Partition NP-Process N-Thread */
         chrono_start(&mproc_chronometer);
         parallel_multiPartition(data, Output_n, nelements_local, limits, nbins, Pos, nthreads);
 
-        // POR ENQUANTO VERIFICANDO SOMENTE O PARTICIONAMENTO ANTES DO MPI
         final_output = multi_partition_mpi(Output_n, Pos, nelements_local, nbins, &nelements_final_output, MPI_COMM_WORLD);        
         chrono_stop(&mproc_chronometer);
 
@@ -993,7 +919,6 @@ int main(int argc, char* argv[]){
         chrono_reset(&mproc_chronometer);
     }
 
-    /* Compute averages */
     double avg_sproc = 0, avg_mproc = 0, avg_sp = 0;
     for (int r = 0; r < nr; r++) {
         avg_sproc += t_1thr1proc[r];
